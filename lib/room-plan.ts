@@ -15,8 +15,8 @@ export const GENRE_ORDER = [
 
 export const SHELF_YS = [0.24, 0.76, 1.28];
 const CASE_DEPTH = 0.26;
-const SLOT = 0.042;
-const BAY_PAD = 0.06;
+const SLOT = 0.05;
+const BAY_PAD = 0.07;
 const MIN_BAY = 0.2;
 const POST = 0.038;
 const SIDE = 0.82;

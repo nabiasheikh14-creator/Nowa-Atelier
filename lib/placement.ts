@@ -12,6 +12,7 @@ export type PlacedBook = {
   size: [number, number, number];
   normal: [number, number, number];
   color: string;
+  coverUrl: string | null;
   genre: string;
   template: number;
   shade: number;
@@ -111,7 +112,7 @@ export function placeCollection(books: Book[]): {
       const row = rows[shelfIndex] ?? [];
       if (row.length === 0) return;
       const usable = frame.width - 0.08;
-      const thickness = Math.min(0.078, (usable / row.length) * 0.8);
+      const thickness = Math.min(0.064, Math.max(0.038, (usable / row.length) * 0.86));
       const gap = (usable - thickness * row.length) / (row.length + 1);
       row.forEach((book, index) => {
         const rng = mulberry32(hashString(book.id));
@@ -128,6 +129,7 @@ export function placeCollection(books: Book[]): {
           size: [thickness, height, depth],
           normal: frame.normal,
           color: CLOTH[Math.floor(rng() * CLOTH.length)] ?? CLOTH[0]!,
+          coverUrl: book.cover_url,
           genre: frame.genre,
           template: -1,
           shade: book.status === "lent" ? 0.62 : 0.94,

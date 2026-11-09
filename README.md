@@ -30,6 +30,6 @@ To use Postgres instead of the local `.data/library.json` file, create the table
 1. The whole collection, in one view. You start facing a single wall. Whole room, under the search bar, returns you there.
 2. The genre names under the search bar. Each one slides you to that section: Fantasy, Speculative, Romance, Literary, Classics, South Asian, Poetry, Mystery, Memoir, East Asian, Mind, Reference.
 3. Movement. Drag to look. A and D, or the arrow keys, slide along the wall. W and S, or the scroll wheel, step closer and back. You cannot turn away from the shelves.
-4. Hover any spine for the title, then click it. The page opens. Escape puts the book back.
+4. Hover any spine for the title, then click it. The page opens on the published jacket, with a short synopsis of the book. Escape puts it back. Spines are the same jackets, cropped to the spine face. Six volumes have no published jacket on Open Library, so those spines stay a plain titled board.
 5. Search from the top. A match carries you to that volume.
 6. Unlock `/admin` to add, edit, or lend a book. A new genre grows its own bay.

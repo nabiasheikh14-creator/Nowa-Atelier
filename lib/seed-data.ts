@@ -1,11 +1,12 @@
 import type { Book } from "./types";
 import { OWNER_ID } from "./owner";
+import coverIndex from "./cover-index.json";
+import { synopsisFor } from "./synopses";
+
+const covers = coverIndex as Record<string, number>;
+const copyCount = new Map<string, number>();
 
 const owner = OWNER_ID;
-
-function cover(isbn: string): string {
-  return `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
-}
 
 type Draft = {
   title: string;
@@ -31,16 +32,19 @@ const books: Draft[] = [
   { title: "University publication magazine", author: "University publication", genre: "Reference", synopsis: "A student magazine from a university press run. Kept with the other things that are not quite books and not quite papers." },
 ];
 
-export const SEED_REVISION = 2;
+export const SEED_REVISION = 4;
 
 function toBook(draft: Draft, index: number): Book {
+  const copy = (copyCount.get(draft.title) ?? 0) + 1;
+  copyCount.set(draft.title, copy);
+  const coverId = covers[`${draft.title}\n${draft.author}`];
   return {
     id: `10000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`,
     owner_id: owner,
     title: draft.title,
     author: draft.author,
-    cover_url: draft.isbn ? cover(draft.isbn) : null,
-    synopsis: draft.synopsis,
+    cover_url: coverId ? `/api/cover?id=${coverId}` : null,
+    synopsis: synopsisFor(draft.title, copy),
     genre: draft.genre,
     format: "physical",
     rating: null,

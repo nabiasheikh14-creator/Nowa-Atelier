@@ -191,6 +191,7 @@ a { color: var(--brass); }
 .book-spread {
   width: min(980px, 94vw);
   min-height: 560px;
+  max-height: min(84vh, 780px);
   display: grid;
   grid-template-columns: 0.86fr 1.14fr;
   position: relative;
@@ -211,11 +212,13 @@ a { color: var(--brass); }
   pointer-events: none;
 }
 .book-page { padding: 42px 40px; position: relative; }
+.book-page-right { overflow: auto; }
 .book-page-left { display: grid; place-items: center; }
 .book-page-left img {
-  width: min(260px, 80%);
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
+  width: min(280px, 86%);
+  height: auto;
+  max-height: 480px;
+  object-fit: contain;
   box-shadow: 0 16px 30px rgba(40, 24, 10, 0.28);
   position: relative;
   z-index: 1;

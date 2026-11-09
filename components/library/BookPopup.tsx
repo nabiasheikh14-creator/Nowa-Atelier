@@ -59,7 +59,7 @@ export function BookPopup({ book, onClose }: { book: Book; onClose: () => void }
           {book.cover_url ? (
             // Covers come from Open Library and are not sized ahead of time.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={book.cover_url} alt="" onError={(event) => (event.currentTarget.style.display = "none")} />
+            <img src={book.cover_url} alt={`${book.title} cover`} onError={(event) => (event.currentTarget.style.display = "none")} />
           ) : null}
           <div className="cloth-fallback">
             <span>{book.genre}</span>

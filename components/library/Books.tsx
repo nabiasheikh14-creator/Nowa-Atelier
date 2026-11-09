@@ -5,18 +5,12 @@ import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
-import {
-  CLOTH_COLORS,
-  FILLER_TEMPLATE_COUNT,
-  FILLER_WORDS_FOR_ATLAS,
-  type Plaque,
-  type PlacedBook,
-} from "@/lib/placement";
+import { type Plaque, type PlacedBook } from "@/lib/placement";
 import { hoverTip, pointerGate } from "./input-state";
 
-const COLS = 16;
-const CELL_W = 96;
-const CELL_H = 240;
+const COLS = 12;
+const CELL_W = 150;
+const CELL_H = 280;
 const UNIT_BOX = new THREE.Box3(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5));
 const inverseWorld = new THREE.Matrix4();
 const inverseInstance = new THREE.Matrix4();
@@ -109,18 +103,7 @@ function drawSpine(
   ctx.fillStyle = "rgba(255, 220, 160, 0.9)";
   ctx.fillRect(x + 12, y + 18, CELL_W - 24, 3);
   ctx.fillRect(x + 12, y + CELL_H - 22, CELL_W - 24, 3);
-  if (!ornament) {
-    ctx.fillStyle = "#e7cb8e";
-    ctx.beginPath();
-    ctx.moveTo(x + CELL_W / 2, y + 30);
-    ctx.lineTo(x + CELL_W / 2 + 10, y + 42);
-    ctx.lineTo(x + CELL_W / 2, y + 54);
-    ctx.lineTo(x + CELL_W / 2 - 10, y + 42);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  const label = title.length > 34 ? `${title.slice(0, 32)}…` : title;
+  const label = title.length > 42 ? `${title.slice(0, 40)}…` : title;
   ctx.save();
   ctx.translate(x + CELL_W / 2, y + CELL_H / 2);
   ctx.rotate(-Math.PI / 2);
@@ -140,6 +123,72 @@ function drawSpine(
   ctx.restore();
 }
 
+function drawJacket(ctx: CanvasRenderingContext2D, x: number, y: number, image: ImageBitmap) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, CELL_W, CELL_H);
+  ctx.clip();
+  const scale = Math.max(CELL_W / image.width, CELL_H / image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  ctx.drawImage(image, x + (CELL_W - width) / 2, y + (CELL_H - height) / 2, width, height);
+  const edge = ctx.createLinearGradient(x, y, x + CELL_W, y);
+  edge.addColorStop(0, "rgba(0,0,0,0.22)");
+  edge.addColorStop(0.16, "rgba(255,255,255,0.05)");
+  edge.addColorStop(1, "rgba(0,0,0,0.28)");
+  ctx.fillStyle = edge;
+  ctx.fillRect(x, y, CELL_W, CELL_H);
+  ctx.restore();
+}
+
+async function loadJacket(url: string | null): Promise<ImageBitmap | null> {
+  if (!url) return null;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    if (blob.size < 4000 || !blob.type.startsWith("image/")) return null;
+    return await createImageBitmap(blob);
+  } catch {
+    return null;
+  }
+}
+
+async function mapPool<T, U>(items: T[], limit: number, run: (item: T) => Promise<U>): Promise<U[]> {
+  const results = new Array<U>(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      const item = items[index];
+      if (item !== undefined) results[index] = await run(item);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
+function paintAtlas(cells: { title: string; color: string; image: ImageBitmap | null }[]): Atlas {
+  const rows = Math.max(1, Math.ceil(cells.length / COLS));
+  const canvas = document.createElement("canvas");
+  canvas.width = COLS * CELL_W;
+  canvas.height = rows * CELL_H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not draw the spines");
+  cells.forEach((cell, index) => {
+    const left = (index % COLS) * CELL_W;
+    const top = Math.floor(index / COLS) * CELL_H;
+    if (cell.image) drawJacket(ctx, left, top, cell.image);
+    else drawSpine(ctx, left, top, cell.title, cell.color, false);
+  });
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  texture.needsUpdate = true;
+  return { texture, cols: COLS, rows, indexes: cells.map((_, index) => index) };
+}
+
 async function buildAtlas(placed: PlacedBook[]): Promise<Atlas> {
   try {
     const face = new FontFace("Cormorant Shelf", "url(/fonts/CormorantGaramond-Medium.ttf)");
@@ -148,36 +197,16 @@ async function buildAtlas(placed: PlacedBook[]): Promise<Atlas> {
     // The canvas falls back to Georgia.
   }
 
-  const cells: { title: string; color: string; ornament: boolean }[] = [];
-  for (let index = 0; index < FILLER_TEMPLATE_COUNT; index++) {
-    cells.push({
-      title: FILLER_WORDS_FOR_ATLAS[index % FILLER_WORDS_FOR_ATLAS.length] || "Volume",
-      color: CLOTH_COLORS[index % CLOTH_COLORS.length] || "#3e2a22",
-      ornament: true,
-    });
-  }
-  const indexes = placed.map((book) => {
-    if (!book.bookId) return 0;
-    cells.push({ title: book.title, color: book.color, ornament: false });
-    return cells.length - 1;
-  });
-  if (cells.length === 0) cells.push({ title: "Volume", color: "#3e2a22", ornament: false });
-
-  const rows = Math.max(1, Math.ceil(cells.length / COLS));
-  const canvas = document.createElement("canvas");
-  canvas.width = COLS * CELL_W;
-  canvas.height = rows * CELL_H;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not draw the spines");
-  cells.forEach((cell, index) => {
-    drawSpine(ctx, (index % COLS) * CELL_W, Math.floor(index / COLS) * CELL_H, cell.title, cell.color, cell.ornament);
-  });
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
-  texture.needsUpdate = true;
-  return { texture, cols: COLS, rows, indexes };
+  const jackets = await mapPool(placed, 8, (book) => loadJacket(book.coverUrl));
+  const cells = placed.map((book, index) => ({
+    title: book.title,
+    color: book.color,
+    image: jackets[index] ?? null,
+  }));
+  if (cells.length === 0) cells.push({ title: "Volume", color: "#3e2a22", image: null });
+  const atlas = paintAtlas(cells);
+  jackets.forEach((image) => image?.close());
+  return atlas;
 }
 
 function makeSpineMaterial(atlas: Atlas): THREE.ShaderMaterial {
@@ -186,12 +215,12 @@ function makeSpineMaterial(atlas: Atlas): THREE.ShaderMaterial {
       uAtlas: { value: atlas.texture },
       uAtlasScale: { value: new THREE.Vector2(1 / atlas.cols, 1 / atlas.rows) },
       uMoonDir: { value: new THREE.Vector3(0.15, 0.42, 0.88).normalize() },
-      uMoonColor: { value: new THREE.Color("#d5e2f4").multiplyScalar(0.72) },
+      uMoonColor: { value: new THREE.Color("#f4f7fb").multiplyScalar(0.28) },
       uLampDir: { value: new THREE.Vector3(0.75, 0.4, 0.2).normalize() },
-      uLampColor: { value: new THREE.Color("#ffc48a").multiplyScalar(0.85) },
+      uLampColor: { value: new THREE.Color("#fff1df").multiplyScalar(0.22) },
       uFillDir: { value: new THREE.Vector3(-0.15, 0.9, -0.2).normalize() },
-      uFillColor: { value: new THREE.Color("#f2d8b8").multiplyScalar(0.34) },
-      uAmbient: { value: new THREE.Color("#7a6456") },
+      uFillColor: { value: new THREE.Color("#fff6ea").multiplyScalar(0.16) },
+      uAmbient: { value: new THREE.Color("#ffffff").multiplyScalar(0.78) },
     },
     vertexShader: spineVertex,
     fragmentShader: spineFragment,
@@ -268,7 +297,23 @@ export function Books({
 
   useEffect(() => {
     let dead = false;
+    let replaced = false;
+    const plain = paintAtlas(
+      placed.map((book) => ({ title: book.title, color: book.color, image: null })),
+    );
+    const showPlain = () => {
+      if (dead || replaced) {
+        plain.texture.dispose();
+        return;
+      }
+      setAtlas((previous) => {
+        previous?.texture.dispose();
+        return plain;
+      });
+    };
+    const handle = requestAnimationFrame(showPlain);
     void buildAtlas(placed).then((next) => {
+      replaced = true;
       if (dead) {
         next.texture.dispose();
         return;
@@ -280,6 +325,7 @@ export function Books({
     });
     return () => {
       dead = true;
+      cancelAnimationFrame(handle);
     };
   }, [placed]);
 
