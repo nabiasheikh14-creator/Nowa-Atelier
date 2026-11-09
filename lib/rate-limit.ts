@@ -24,8 +24,6 @@ export function rateLimit(
   return { ok: true };
 }
 
-export function clientKey(request: Request, bucket: string): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "local";
-  return `${bucket}:${ip}`;
+export function clientKey(_request: Request, bucket: string): string {
+  return bucket;
 }

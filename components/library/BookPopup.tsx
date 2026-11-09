@@ -1,14 +1,9 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect } from "react";
 import type { Book } from "@/lib/types";
 
 export function BookPopup({ book, onClose }: { book: Book; onClose: () => void }) {
-  const [note, setNote] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -16,31 +11,6 @@ export function BookPopup({ book, onClose }: { book: Book; onClose: () => void }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setPending(true);
-    const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/borrow", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        bookId: book.id,
-        name: form.get("name"),
-        email: form.get("email"),
-        message: form.get("message"),
-        company: form.get("company"),
-      }),
-    });
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-    setPending(false);
-    if (!response.ok) {
-      setError(payload?.error || "The request did not go through.");
-      return;
-    }
-    setSent(true);
-  }
 
   const canBorrow = book.format === "physical" && book.status === "available";
 
@@ -82,8 +52,8 @@ export function BookPopup({ book, onClose }: { book: Book; onClose: () => void }
               {book.review}
             </blockquote>
           )}
-          {canBorrow && !note && !sent && (
-            <button className="ink-button" type="button" onClick={() => setNote(true)}>
+          {canBorrow && (
+            <button className="ink-button" type="button">
               Request to borrow
             </button>
           )}
@@ -91,36 +61,6 @@ export function BookPopup({ book, onClose }: { book: Book; onClose: () => void }
             <p className="aside">This copy is out at the moment.</p>
           )}
           {book.format === "epub" && <p className="aside ask">Ask me about this one.</p>}
-          {note && !sent && (
-            <form className="borrow-form" onSubmit={submit}>
-              <label>
-                Name
-                <input name="name" autoComplete="name" required maxLength={80} />
-              </label>
-              <label>
-                Email
-                <input name="email" type="email" autoComplete="email" required maxLength={160} />
-              </label>
-              <label>
-                Message <span>optional</span>
-                <textarea name="message" rows={3} maxLength={2000} />
-              </label>
-              <label className="hp" aria-hidden="true">
-                Company
-                <input name="company" tabIndex={-1} autoComplete="off" />
-              </label>
-              {error && <p className="form-error">{error}</p>}
-              <div className="form-actions">
-                <button className="ink-button" type="submit" disabled={pending}>
-                  {pending ? "Sending" : "Send the request"}
-                </button>
-                <button className="text-button" type="button" onClick={() => setNote(false)}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
-          {sent && <p className="aside">Your request is with the keeper of this library.</p>}
         </div>
       </article>
     </div>

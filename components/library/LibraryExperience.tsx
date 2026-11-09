@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Book } from "@/lib/types";
 import { GENRE_ORDER } from "@/lib/room-plan";
@@ -192,9 +191,6 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
       {introDone && (
         <p className="hint">Drag to look · A and D along the shelves · W and S or scroll to step closer</p>
       )}
-      <Link className="keeper" href="/admin">
-        Keeper
-      </Link>
       <button
         className={`tone ${audioOn ? "on" : ""}`}
         type="button"

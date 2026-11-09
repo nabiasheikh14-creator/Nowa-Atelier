@@ -41,9 +41,6 @@ alter table books enable row level security;
 alter table borrow_requests enable row level security;
 
 drop policy if exists books_public_read on books;
-create policy books_public_read on books
-  for select
-  using (true);
 
--- Writes go through the server with the service role, which bypasses RLS.
--- Borrow requests are never readable by the public role.
+-- No public policies. Row level security stays on, so the public role
+-- cannot read books or borrow requests. The server uses the service role.
