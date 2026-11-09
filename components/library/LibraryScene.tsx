@@ -8,7 +8,6 @@ import { placeCollection } from "@/lib/placement";
 import { Books } from "./Books";
 import { CameraRig, type FocusRequest } from "./CameraRig";
 import { Dust } from "./Dust";
-import { Effects } from "./Effects";
 import { Room } from "./Room";
 
 export function LibraryScene({
@@ -33,70 +32,47 @@ export function LibraryScene({
   onInteract: () => void;
 }) {
   const layout = useMemo(() => placeCollection(books), [books]);
-  const moonDust = useMemo(
-    () => ({ min: [-0.8, 0.6, -0.4] as [number, number, number], max: [1.3, 3.4, 3.4] as [number, number, number] }),
-    [],
-  );
-  const lampDust = useMemo(
-    () => ({ min: [1.2, 0.4, 0.2] as [number, number, number], max: [2.4, 1.6, 1.5] as [number, number, number] }),
-    [],
+  const dust = useMemo(
+    () => ({
+      min: [-layout.room.width * 0.35, 0.8, layout.room.home.z - 1.4] as [number, number, number],
+      max: [layout.room.width * 0.35, 2.1, layout.room.home.z] as [number, number, number],
+    }),
+    [layout.room],
   );
 
   return (
     <Canvas
-      shadows="basic"
-      dpr={[1, 1.5]}
-      camera={{ fov: 40, near: 0.08, far: 40, position: [0.15, 1.98, 3.05] }}
+      dpr={[1, 1.25]}
+      camera={{ fov: 60, near: 0.08, far: 30, position: [0, 1.36, 2] }}
       gl={{
         antialias: true,
         powerPreference: "high-performance",
         toneMapping: THREE.ACESFilmicToneMapping,
-        toneMappingExposure: 1.05,
+        toneMappingExposure: 1.12,
       }}
       onCreated={({ gl }) => {
-        gl.setClearColor("#0c0e11");
-        gl.shadowMap.type = THREE.PCFShadowMap;
+        gl.setClearColor("#12110f");
       }}
     >
-      <color attach="background" args={["#0c0e11"]} />
-      <fog attach="fog" args={["#141311", 9, 18]} />
-      <ambientLight intensity={0.28} color={"#f3e6d4"} />
-      <hemisphereLight args={["#31445c", "#3a2618", 0.55]} />
-      <directionalLight
-        position={[0.8, 6.2, 7.4]}
-        intensity={1.45}
-        color={"#d5e1f2"}
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-camera-near={1}
-        shadow-camera-far={24}
-        shadow-camera-left={-8}
-        shadow-camera-right={8}
-        shadow-camera-top={8}
-        shadow-camera-bottom={-8}
-        shadow-bias={-0.0008}
-      />
-      <pointLight position={[0, 3.1, 0.2]} intensity={4} distance={12} decay={2} color={"#ffe1c2"} />
-      <Room />
+      <color attach="background" args={["#12110f"]} />
+      <ambientLight intensity={0.55} color={"#f4e7d4"} />
+      <hemisphereLight args={["#6d7e92", "#3a2618", 0.72]} />
+      <directionalLight position={[-2.2, 3.4, 2.4]} intensity={1.15} color={"#d5e1f2"} />
+      <pointLight position={[0, 2.1, 0.4]} intensity={6} distance={9} decay={2} color={"#ffe1c2"} />
+      <Room room={layout.room} frames={layout.frames} />
       <Books placed={layout.placed} plaques={layout.plaques} focusId={focus?.id ?? null} onOpen={onOpen} />
-      <mesh raycast={() => null} position={[0.25, 2.35, 1.15]} rotation={[1.05, 0, 0.04]}>
-        <boxGeometry args={[1.35, 5.2, 1.15]} />
-        <meshBasicMaterial color={"#d7e4f6"} transparent opacity={0.045} depthWrite={false} />
-      </mesh>
-      <Dust count={280} bounds={moonDust} color={"#d5e4f6"} size={0.02} />
-      <Dust count={120} bounds={lampDust} color={"#ffd7a8"} size={0.016} />
+      <Dust count={48} bounds={dust} color={"#efe2cc"} size={0.018} />
       <CameraRig
         placed={layout.placed}
         focus={focus}
         popup={popup}
         reducedMotion={reducedMotion}
         skipIntro={skipIntro}
+        room={layout.room}
         onArrive={onArrive}
         onIntroDone={onIntroDone}
         onInteract={onInteract}
       />
-      <Effects />
     </Canvas>
   );
 }

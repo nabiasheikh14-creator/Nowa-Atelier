@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Book } from "@/lib/types";
+import { GENRE_ORDER } from "@/lib/room-plan";
 import { BookPopup } from "./BookPopup";
 import { FallbackLibrary } from "./FallbackLibrary";
 import { hoverTip } from "./input-state";
@@ -70,6 +71,12 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
   }, [audioOn]);
 
   const results = useMemo(() => rank(books, query), [books, query]);
+  const genres = useMemo(() => {
+    const present = new Set(books.map((book) => book.genre));
+    const known = GENRE_ORDER.filter((genre) => present.has(genre));
+    const extra = [...present].filter((genre) => !known.includes(genre as (typeof GENRE_ORDER)[number]));
+    return [...known, ...extra];
+  }, [books]);
   const openBook = books.find((book) => book.id === focus?.id && popup) ?? null;
 
   function choose(id: string) {
@@ -86,6 +93,18 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
   function closeBook() {
     setPopup(false);
     setFocus(null);
+  }
+
+  function showRoom() {
+    setPopup(false);
+    setQuery("");
+    setFocus({ id: "room", intent: "home" });
+  }
+
+  function showGenre(genre: string) {
+    setPopup(false);
+    setQuery("");
+    setFocus({ id: genre, intent: "section" });
   }
 
   if (mode === "checking") {
@@ -147,6 +166,21 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
             </ul>
           )}
         </form>
+        <div className="rail">
+          <button type="button" className={!focus || focus.intent === "home" ? "current" : ""} onClick={showRoom}>
+            Whole room
+          </button>
+          {genres.map((genre) => (
+            <button
+              key={genre}
+              type="button"
+              className={focus?.intent === "section" && focus.id === genre ? "current" : ""}
+              onClick={() => showGenre(genre)}
+            >
+              {genre}
+            </button>
+          ))}
+        </div>
       </header>
       {!introDone && (
         <button className="intro" type="button" onClick={() => setSkipIntro(true)}>
@@ -155,7 +189,9 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
           <em>Enter</em>
         </button>
       )}
-      {introDone && <p className="hint">Drag to look · Scroll to step closer · Click a gilt-marked book</p>}
+      {introDone && (
+        <p className="hint">Drag to look · A and D along the shelves · W and S or scroll to step closer</p>
+      )}
       <Link className="keeper" href="/admin">
         Keeper
       </Link>

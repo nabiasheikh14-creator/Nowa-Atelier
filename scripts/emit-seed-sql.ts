@@ -1,4 +1,5 @@
 import { writeFileSync } from "node:fs";
+import { OWNER_ID } from "../lib/owner";
 import { SEED_BOOKS } from "../lib/seed-data";
 
 function sql(value: string | null): string {
@@ -12,11 +13,12 @@ const values = SEED_BOOKS.map(
 ).join(",\n");
 
 const file = `-- Generated from lib/seed-data.ts. Re-run with: npx tsx scripts/emit-seed-sql.ts
+-- Replaces this owner's shelf, including the earlier demo titles. Borrow rows cascade.
+delete from books where owner_id = '${OWNER_ID}';
 insert into books (
   id, owner_id, title, author, cover_url, synopsis, genre, format, rating, review, isbn, status, created_at
 ) values
-${values}
-on conflict (id) do nothing;
+${values};
 `;
 
 writeFileSync(new URL("../supabase/seed.sql", import.meta.url), file);

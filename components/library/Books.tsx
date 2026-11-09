@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
@@ -14,9 +14,9 @@ import {
 } from "@/lib/placement";
 import { hoverTip, pointerGate } from "./input-state";
 
-const COLS = 8;
-const CELL_W = 128;
-const CELL_H = 320;
+const COLS = 16;
+const CELL_W = 96;
+const CELL_H = 240;
 const UNIT_BOX = new THREE.Box3(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5));
 const inverseWorld = new THREE.Matrix4();
 const inverseInstance = new THREE.Matrix4();
@@ -126,13 +126,13 @@ function drawSpine(
   ctx.rotate(-Math.PI / 2);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  let size = ornament ? 40 : 48;
+  let size = ornament ? 26 : 32;
   const maxWidth = CELL_H - 88;
   do {
     ctx.font = `500 ${size}px "Cormorant Shelf", Palatino, Georgia, serif`;
     if (ctx.measureText(label).width <= maxWidth) break;
     size -= 2;
-  } while (size > 18);
+  } while (size > 14);
   ctx.fillStyle = "rgba(70, 42, 12, 0.75)";
   ctx.fillText(label, 1.5, 2);
   ctx.fillStyle = "#e7cb8e";
@@ -157,12 +157,13 @@ async function buildAtlas(placed: PlacedBook[]): Promise<Atlas> {
     });
   }
   const indexes = placed.map((book) => {
-    if (!book.bookId) return book.template % FILLER_TEMPLATE_COUNT;
+    if (!book.bookId) return 0;
     cells.push({ title: book.title, color: book.color, ornament: false });
     return cells.length - 1;
   });
+  if (cells.length === 0) cells.push({ title: "Volume", color: "#3e2a22", ornament: false });
 
-  const rows = Math.ceil(cells.length / COLS);
+  const rows = Math.max(1, Math.ceil(cells.length / COLS));
   const canvas = document.createElement("canvas");
   canvas.width = COLS * CELL_W;
   canvas.height = rows * CELL_H;
@@ -213,6 +214,9 @@ export function Books({
   const ribbons = useRef<THREE.InstancedMesh>(null);
   const pull = useRef<Float32Array>(new Float32Array(placed.length));
   const hoverIndex = useRef<number | null>(null);
+  const pressed = useRef<number | null>(null);
+  const lastHover = useRef<{ index: number; x: number; y: number } | null>(null);
+  const gl = useThree((state) => state.gl);
   const focusRef = useRef(focusId);
   const onOpenRef = useRef(onOpen);
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -241,7 +245,7 @@ export function Books({
         book.position[2] + book.normal[2] * shift,
       );
       scratchQuaternion.set(book.quaternion[0], book.quaternion[1], book.quaternion[2], book.quaternion[3]);
-      scratchScale.set(book.size[0] + 0.014, book.size[1], book.size[2]);
+      scratchScale.set(book.size[0] + 0.02, book.size[1], book.size[2]);
       instanceMatrix.compose(scratchPosition, scratchQuaternion, scratchScale);
       inverseInstance.copy(instanceMatrix).invert();
       localRay.copy(worldRay).applyMatrix4(inverseInstance);
@@ -356,7 +360,7 @@ export function Books({
     let ribbonsDirty = false;
     for (let index = 0; index < placed.length; index++) {
       const book = placed[index]!;
-      const target = book.bookId === focus ? 0.28 : index === hover ? (book.bookId ? 0.14 : 0.06) : 0;
+      const target = book.bookId === focus ? 0.16 : index === hover ? 0.035 : 0;
       const currentPull = pull.current[index] ?? 0;
       const next = THREE.MathUtils.damp(currentPull, target, 8, delta);
       if (Math.abs(next - currentPull) < 0.0003) continue;
@@ -386,12 +390,46 @@ export function Books({
     if (ribbonsDirty && ribbons.current) ribbons.current.instanceMatrix.needsUpdate = true;
   });
 
+  useEffect(() => {
+    const up = (event: PointerEvent) => {
+      const fromPress = pressed.current;
+      pressed.current = null;
+      if (pointerGate.dragged) return;
+      let index = fromPress;
+      const last = lastHover.current;
+      if (index === null && last) {
+        const dx = event.clientX - last.x;
+        const dy = event.clientY - last.y;
+        if (dx * dx + dy * dy <= 36 * 36) index = last.index;
+      }
+      if (index === null) return;
+      const book = placedRef.current[index];
+      if (!book?.bookId) return;
+      onOpenRef.current(book.bookId);
+    };
+    const clear = () => {
+      pressed.current = null;
+    };
+    const element = gl.domElement;
+    element.addEventListener("pointerdown", clear, true);
+    element.addEventListener("pointerup", up);
+    return () => {
+      element.removeEventListener("pointerdown", clear, true);
+      element.removeEventListener("pointerup", up);
+    };
+  }, [gl]);
+
+  function down(event: ThreeEvent<PointerEvent>) {
+    pressed.current = typeof event.instanceId === "number" ? event.instanceId : null;
+  }
+
   function move(event: ThreeEvent<PointerEvent>) {
     const index = event.instanceId;
     if (typeof index !== "number") return;
     const book = placed[index];
     const canvas = event.nativeEvent.target as HTMLElement;
     hoverIndex.current = index;
+    lastHover.current = { index, x: event.nativeEvent.clientX, y: event.nativeEvent.clientY };
     hoverTip.show(book.title, event.nativeEvent.clientX, event.nativeEvent.clientY);
     canvas.style.cursor = book.bookId ? "pointer" : "default";
   }
@@ -400,16 +438,6 @@ export function Books({
     hoverIndex.current = null;
     hoverTip.hide();
     (event.nativeEvent.target as HTMLElement).style.cursor = "";
-  }
-
-  function click(event: ThreeEvent<MouseEvent>) {
-    if (pointerGate.dragged) return;
-    const index = event.instanceId;
-    if (typeof index !== "number") return;
-    const book = placed[index];
-    if (!book?.bookId) return;
-    event.stopPropagation();
-    onOpenRef.current(book.bookId);
   }
 
   return (
@@ -421,9 +449,9 @@ export function Books({
           args={[built.geometry, built.materials, placed.length]}
           frustumCulled={false}
           raycast={raycast}
+          onPointerDown={down}
           onPointerMove={move}
           onPointerOut={leave}
-          onClick={click}
         />
       )}
       {lent.length > 0 && (
@@ -434,19 +462,20 @@ export function Books({
       )}
       {plaques.map((plaque) => (
         <group key={plaque.id} position={plaque.position} rotation={[0, plaque.yaw, 0]} raycast={() => null}>
-          <mesh castShadow>
-            <boxGeometry args={[0.5, 0.09, 0.016]} />
+          <mesh>
+            <boxGeometry args={[Math.max(0.16, plaque.width - 0.02), 0.09, 0.012]} />
             <meshStandardMaterial color={"#b08d57"} metalness={0.74} roughness={0.3} />
           </mesh>
           <Text
             font="/fonts/CormorantGaramond-Medium.ttf"
-            position={[0, -0.002, 0.011]}
-            fontSize={0.03}
+            position={[0, -0.002, 0.01]}
+            fontSize={plaque.width < 0.34 ? 0.015 : 0.02}
             color={"#3a2914"}
             anchorX="center"
             anchorY="middle"
-            maxWidth={0.46}
-            letterSpacing={0.045}
+            maxWidth={Math.max(0.14, plaque.width - 0.04)}
+            textAlign="center"
+            letterSpacing={0.03}
           >
             {plaque.label.toUpperCase()}
           </Text>

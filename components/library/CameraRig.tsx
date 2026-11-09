@@ -4,33 +4,41 @@ import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { PlacedBook } from "@/lib/placement";
-import { EYE, clampCamera } from "@/lib/room-plan";
+import { clampCamera, type RoomPlan } from "@/lib/room-plan";
 import { pointerGate } from "./input-state";
 
-export type FocusRequest = { id: string; intent: "highlight" | "open" } | null;
+export type FocusRequest = { id: string; intent: "highlight" | "open" | "home" | "section" } | null;
 
 type Pose = { x: number; y: number; z: number; yaw: number; pitch: number };
 
-const INTRO_FROM: Pose = { x: 0.15, y: 1.98, z: 3.05, yaw: 0.48, pitch: -0.08 };
-const INTRO_TO: Pose = { x: -0.35, y: EYE, z: 0.42, yaw: -0.38, pitch: 0.02 };
-
-function dampAngle(current: number, target: number, lambda: number, delta: number): number {
-  const deltaAngle = Math.atan2(Math.sin(target - current), Math.cos(target - current));
-  return current + deltaAngle * (1 - Math.exp(-lambda * delta));
+function dampAngle(current: number, target: number): number {
+  return Math.atan2(Math.sin(target - current), Math.cos(target - current));
 }
 
 function poseLookingAt(x: number, y: number, z: number, book: PlacedBook): Pose {
   const dx = book.position[0] - x;
   const dy = book.position[1] - y;
   const dz = book.position[2] - z;
-  const yaw = Math.atan2(-dx, -dz);
-  const pitch = THREE.MathUtils.clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.62, 0.55);
+  const yaw = THREE.MathUtils.clamp(Math.atan2(-dx, -dz), -0.42, 0.42);
+  const pitch = THREE.MathUtils.clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.38, 0.32);
   return { x, y, z, yaw, pitch };
 }
 
-function viewpoint(book: PlacedBook): Pose {
-  const distance = 1.22;
-  const pull = 0.28;
+function sectionPose(genre: string, placed: PlacedBook[], room: RoomPlan): Pose {
+  const books = placed.filter((book) => book.genre === genre);
+  if (books.length === 0) return { ...room.home };
+  const xs = books.map((book) => book.position[0]);
+  const center = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const span = Math.max(0.42, Math.max(...xs) - Math.min(...xs) + 0.16);
+  const halfHorizontal = Math.atan(Math.tan((30 * Math.PI) / 180) * 1.4);
+  const dist = span / 2 / Math.tan(halfHorizontal) + 0.38;
+  const front = books[0]!.position[2] + books[0]!.size[2] / 2;
+  const spot = clampCamera(center, front + dist, room);
+  return { x: spot.x, y: room.home.y, z: spot.z, yaw: 0, pitch: -0.02 };
+}
+
+function viewpoint(book: PlacedBook, room: RoomPlan): Pose {
+  const pull = 0.16;
   const aimed: PlacedBook = {
     ...book,
     position: [
@@ -39,11 +47,8 @@ function viewpoint(book: PlacedBook): Pose {
       book.position[2] + book.normal[2] * pull,
     ],
   };
-  const y = THREE.MathUtils.clamp(aimed.position[1] + 0.18, 1.02, 2.35);
-  const spot = clampCamera(
-    aimed.position[0] + book.normal[0] * distance,
-    aimed.position[2] + book.normal[2] * distance,
-  );
+  const spot = clampCamera(aimed.position[0], aimed.position[2] + 1.05, room);
+  const y = THREE.MathUtils.clamp(aimed.position[1] + 0.06, 1.08, 1.72);
   return poseLookingAt(spot.x, y, spot.z, aimed);
 }
 
@@ -53,6 +58,7 @@ export function CameraRig({
   popup,
   reducedMotion,
   skipIntro,
+  room,
   onIntroDone,
   onArrive,
   onInteract,
@@ -62,12 +68,14 @@ export function CameraRig({
   popup: boolean;
   reducedMotion: boolean;
   skipIntro: boolean;
+  room: RoomPlan;
   onIntroDone: () => void;
   onArrive: () => void;
   onInteract: () => void;
 }) {
   const { gl } = useThree();
-  const pose = useRef<Pose>({ ...INTRO_FROM });
+  const roomRef = useRef(room);
+  const pose = useRef<Pose>({ ...room.home, z: room.home.z + 0.45, yaw: 0.2 });
   const intro = useRef(reducedMotion ? 1 : 0);
   const introTold = useRef(false);
   const mode = useRef<"intro" | "free" | "fly" | "hold">("intro");
@@ -78,14 +86,16 @@ export function CameraRig({
   const dragging = useRef(false);
   const last = useRef({ x: 0, y: 0 });
   const moved = useRef(0);
+  const keys = useRef(new Set<string>());
   const onArriveRef = useRef(onArrive);
   const onIntroRef = useRef(onIntroDone);
   const onInteractRef = useRef(onInteract);
   useEffect(() => {
+    roomRef.current = room;
     onArriveRef.current = onArrive;
     onIntroRef.current = onIntroDone;
     onInteractRef.current = onInteract;
-  }, [onArrive, onIntroDone, onInteract]);
+  }, [onArrive, onIntroDone, onInteract, room]);
 
   useEffect(() => {
     const element = gl.domElement;
@@ -107,8 +117,8 @@ export function CameraRig({
         pointerGate.dragged = true;
         onInteractRef.current();
       }
-      pose.current.yaw -= dx * 0.0023;
-      pose.current.pitch = THREE.MathUtils.clamp(pose.current.pitch - dy * 0.0017, -0.62, 0.55);
+      pose.current.yaw = THREE.MathUtils.clamp(pose.current.yaw - dx * 0.003, -0.42, 0.42);
+      pose.current.pitch = THREE.MathUtils.clamp(pose.current.pitch - dy * 0.0022, -0.38, 0.32);
     };
     const up = (event: PointerEvent) => {
       dragging.current = false;
@@ -121,44 +131,53 @@ export function CameraRig({
       if (mode.current !== "free") return;
       event.preventDefault();
       onInteractRef.current();
-      const step = -event.deltaY * 0.0015;
-      const next = clampCamera(
-        pose.current.x + -Math.sin(pose.current.yaw) * step,
-        pose.current.z + -Math.cos(pose.current.yaw) * step,
-      );
+      const next = clampCamera(pose.current.x, pose.current.z + -event.deltaY * 0.0024, roomRef.current);
       pose.current.x = next.x;
       pose.current.z = next.z;
+    };
+    const keyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      keys.current.add(event.key.toLowerCase());
+    };
+    const keyUp = (event: KeyboardEvent) => {
+      keys.current.delete(event.key.toLowerCase());
     };
     element.addEventListener("pointerdown", down);
     element.addEventListener("pointermove", move);
     element.addEventListener("pointerup", up);
     element.addEventListener("pointercancel", up);
     element.addEventListener("wheel", wheel, { passive: false });
+    window.addEventListener("keydown", keyDown);
+    window.addEventListener("keyup", keyUp);
     return () => {
       element.removeEventListener("pointerdown", down);
       element.removeEventListener("pointermove", move);
       element.removeEventListener("pointerup", up);
       element.removeEventListener("pointercancel", up);
       element.removeEventListener("wheel", wheel);
+      window.removeEventListener("keydown", keyDown);
+      window.removeEventListener("keyup", keyUp);
     };
   }, [gl]);
 
   useFrame((state, delta) => {
     const camera = state.camera;
-    const dt = Math.min(delta, 0.05);
+    const plan = roomRef.current;
     if (mode.current === "intro") {
-      intro.current = Math.min(1, intro.current + dt / (reducedMotion || skipIntro ? 0.01 : 6.6));
+      intro.current = Math.min(1, intro.current + delta / (reducedMotion || skipIntro ? 0.01 : 0.55));
       const t = intro.current * intro.current * (3 - 2 * intro.current);
+      const from = { ...plan.home, z: plan.home.z + 0.45, yaw: 0.2 };
       pose.current = {
-        x: THREE.MathUtils.lerp(INTRO_FROM.x, INTRO_TO.x, t),
-        y: THREE.MathUtils.lerp(INTRO_FROM.y, INTRO_TO.y, t),
-        z: THREE.MathUtils.lerp(INTRO_FROM.z, INTRO_TO.z, t),
-        yaw: THREE.MathUtils.lerp(INTRO_FROM.yaw, INTRO_TO.yaw, t),
-        pitch: THREE.MathUtils.lerp(INTRO_FROM.pitch, INTRO_TO.pitch, t),
+        x: THREE.MathUtils.lerp(from.x, plan.home.x, t),
+        y: plan.home.y,
+        z: THREE.MathUtils.lerp(from.z, plan.home.z, t),
+        yaw: THREE.MathUtils.lerp(from.yaw, plan.home.yaw, t),
+        pitch: plan.home.pitch,
       };
       if (intro.current >= 1) {
         mode.current = "free";
-        pose.current = { ...INTRO_TO };
+        pose.current = { ...plan.home };
         if (!introTold.current) {
           introTold.current = true;
           onIntroRef.current();
@@ -171,12 +190,50 @@ export function CameraRig({
       return;
     }
 
+    if (mode.current === "free") {
+      const held = keys.current;
+      let x = pose.current.x;
+      let z = pose.current.z;
+      const step = 1.45 * Math.min(delta, 0.05);
+      let stepped = false;
+      if (held.has("a") || held.has("arrowleft")) {
+        x -= step;
+        stepped = true;
+      }
+      if (held.has("d") || held.has("arrowright")) {
+        x += step;
+        stepped = true;
+      }
+      if (held.has("w") || held.has("arrowup")) {
+        z -= step;
+        stepped = true;
+      }
+      if (held.has("s") || held.has("arrowdown")) {
+        z += step;
+        stepped = true;
+      }
+      if (stepped) {
+        const next = clampCamera(x, z, plan);
+        pose.current.x = next.x;
+        pose.current.z = next.z;
+        onInteractRef.current();
+      }
+    }
+
     const key = focus ? `${focus.id}:${focus.intent}` : null;
     if (key !== focusKey.current) {
       const previous = focusKey.current;
       focusKey.current = key;
       arrivedFor.current = null;
-      if (focus) {
+      if (focus?.intent === "home") {
+        fly.current = { from: { ...pose.current }, to: { ...plan.home }, t: 0, open: false };
+        returnPose.current = null;
+        mode.current = "fly";
+      } else if (focus?.intent === "section") {
+        fly.current = { from: { ...pose.current }, to: sectionPose(focus.id, placed, plan), t: 0, open: false };
+        returnPose.current = null;
+        mode.current = "fly";
+      } else if (focus) {
         const book = placed.find((item) => item.bookId === focus.id);
         const sameBook = Boolean(previous?.startsWith(`${focus.id}:`) && fly.current);
         if (book && sameBook && fly.current) {
@@ -186,9 +243,9 @@ export function CameraRig({
           if (focus.intent === "open") returnPose.current = { ...pose.current };
           else returnPose.current = null;
           const from = { ...pose.current };
-          const to = viewpoint(book);
+          const to = viewpoint(book, plan);
           const dist = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
-          const yawDelta = Math.abs(Math.atan2(Math.sin(to.yaw - from.yaw), Math.cos(to.yaw - from.yaw)));
+          const yawDelta = Math.abs(dampAngle(from.yaw, to.yaw));
           if (focus.intent === "open" && dist < 0.28 && yawDelta < 0.18) {
             pose.current = { ...to };
             fly.current = null;
@@ -207,7 +264,7 @@ export function CameraRig({
     }
 
     if (mode.current === "fly" && fly.current) {
-      fly.current.t = Math.min(1, fly.current.t + delta / 1.35);
+      fly.current.t = Math.min(1, fly.current.t + delta / 0.85);
       const t = fly.current.t * fly.current.t * (3 - 2 * fly.current.t);
       const from = fly.current.from;
       const to = fly.current.to;
@@ -215,7 +272,7 @@ export function CameraRig({
         x: THREE.MathUtils.lerp(from.x, to.x, t),
         y: THREE.MathUtils.lerp(from.y, to.y, t),
         z: THREE.MathUtils.lerp(from.z, to.z, t),
-        yaw: dampAngle(from.yaw, to.yaw, 0, 0) + Math.atan2(Math.sin(to.yaw - from.yaw), Math.cos(to.yaw - from.yaw)) * t,
+        yaw: from.yaw + dampAngle(from.yaw, to.yaw) * t,
         pitch: THREE.MathUtils.lerp(from.pitch, to.pitch, t),
       };
       if (fly.current.t >= 1) {

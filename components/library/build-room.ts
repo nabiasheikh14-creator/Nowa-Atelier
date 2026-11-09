@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { ROOM, SHELF_FRAMES, type ShelfFrame } from "@/lib/room-plan";
+import { type RoomPlan, type ShelfFrame } from "@/lib/room-plan";
 
 function orientedBox(
   width: number,
@@ -23,15 +23,19 @@ function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
 }
 
 function caseTop(frame: ShelfFrame): number {
-  return frame.wall === "window" ? 1.14 : 4.32;
+  return Math.max(...frame.shelfYs) + 0.6;
 }
 
-export function buildShelfGeometry(): { carcass: THREE.BufferGeometry; backs: THREE.BufferGeometry } {
+export function buildShelfGeometry(frames: ShelfFrame[]): { carcass: THREE.BufferGeometry; backs: THREE.BufferGeometry } {
   const carcass: THREE.BufferGeometry[] = [];
   const backs: THREE.BufferGeometry[] = [];
-  const side = 0.055;
+  const side = 0.045;
+  if (frames.length === 0) {
+    const empty = new THREE.BufferGeometry();
+    return { carcass: empty, backs: empty };
+  }
 
-  for (const frame of SHELF_FRAMES) {
+  for (const frame of frames) {
     const top = caseTop(frame);
     const mid = frame.width / 2;
     const depth = frame.depth;
@@ -57,18 +61,18 @@ export function buildShelfGeometry(): { carcass: THREE.BufferGeometry; backs: TH
   return { carcass: merge(carcass), backs: merge(backs) };
 }
 
-export function buildShellGeometry(): { walls: THREE.BufferGeometry; front: THREE.BufferGeometry } {
+export function buildShellGeometry(room: RoomPlan): { walls: THREE.BufferGeometry; front: THREE.BufferGeometry } {
   const parts: THREE.BufferGeometry[] = [];
-  const height = ROOM.height;
-  const wall = ROOM.wall;
-  const halfW = ROOM.width / 2;
-  const halfD = ROOM.depth / 2;
+  const height = room.height;
+  const wall = room.wall;
+  const halfW = room.width / 2;
+  const halfD = room.depth / 2;
 
-  const back = new THREE.BoxGeometry(ROOM.width, height, wall);
+  const back = new THREE.BoxGeometry(room.width, height, wall);
   back.translate(0, height / 2, -(halfD - wall / 2));
   parts.push(back);
 
-  const sideSpan = ROOM.depth - wall * 2;
+  const sideSpan = room.depth - wall * 2;
   const left = new THREE.BoxGeometry(wall, height, sideSpan);
   left.translate(-(halfW - wall / 2), height / 2, 0);
   parts.push(left);
@@ -76,29 +80,8 @@ export function buildShellGeometry(): { walls: THREE.BufferGeometry; front: THRE
   right.translate(halfW - wall / 2, height / 2, 0);
   parts.push(right);
 
-  const shape = new THREE.Shape();
-  shape.moveTo(-halfW, 0);
-  shape.lineTo(halfW, 0);
-  shape.lineTo(halfW, height);
-  shape.lineTo(-halfW, height);
-  shape.closePath();
-
-  const radius = 0.86;
-  const spring = 1.92;
-  const sill = 1.12;
-  const hole = new THREE.Path();
-  hole.moveTo(-radius, sill);
-  hole.lineTo(-radius, spring);
-  for (let i = 0; i <= 32; i++) {
-    const angle = Math.PI - (i / 32) * Math.PI;
-    hole.lineTo(Math.cos(angle) * radius, spring + Math.sin(angle) * radius);
-  }
-  hole.lineTo(radius, sill);
-  hole.closePath();
-  shape.holes.push(hole);
-
-  const front = new THREE.ExtrudeGeometry(shape, { depth: wall, bevelEnabled: false });
-  front.translate(0, 0, halfD - wall);
+  const front = new THREE.BoxGeometry(room.width, height, wall);
+  front.translate(0, height / 2, halfD - wall / 2);
 
   return { walls: merge(parts), front };
 }

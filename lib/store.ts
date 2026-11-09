@@ -2,10 +2,11 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { OWNER_ID } from "./owner";
-import { SEED_BOOKS } from "./seed-data";
+import { SEED_BOOKS, SEED_REVISION } from "./seed-data";
 import type { Book, BookInput, BorrowRequest, BorrowRequestView } from "./types";
 
 type DatabaseShape = {
+  revision: number;
   books: Book[];
   borrow_requests: BorrowRequest[];
 };
@@ -42,8 +43,11 @@ async function readFileStore(): Promise<DatabaseShape> {
   try {
     const raw = await readFile(FILE, "utf8");
     const parsed = JSON.parse(raw) as DatabaseShape;
-    if (!Array.isArray(parsed.books) || !parsed.books.every(isBook)) throw new Error("bad store");
+    if (!Array.isArray(parsed.books) || !parsed.books.every(isBook) || parsed.revision !== SEED_REVISION) {
+      throw new Error("bad store");
+    }
     return {
+      revision: SEED_REVISION,
       books: parsed.books,
       borrow_requests: Array.isArray(parsed.borrow_requests) ? parsed.borrow_requests : [],
     };
@@ -52,6 +56,7 @@ async function readFileStore(): Promise<DatabaseShape> {
     const reseed = code === "ENOENT" || error instanceof SyntaxError || (error instanceof Error && error.message === "bad store");
     if (!reseed) throw error;
     const fresh: DatabaseShape = {
+      revision: SEED_REVISION,
       books: SEED_BOOKS.map((book) => ({ ...book, owner_id: OWNER_ID })),
       borrow_requests: [],
     };

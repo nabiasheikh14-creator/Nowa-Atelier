@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { SEED_BOOKS } from "../lib/seed-data";
 import { placeCollection } from "../lib/placement";
 
-const { placed, plaques } = placeCollection(SEED_BOOKS);
+const { placed, plaques, room } = placeCollection(SEED_BOOKS);
 const real = placed.filter((book) => book.bookId);
 const ids = new Set(real.map((book) => book.bookId));
 const missing = SEED_BOOKS.filter((book) => !ids.has(book.id)).map((book) => book.title);
@@ -18,23 +18,26 @@ for (const book of real) {
 }
 const outside = placed.filter((book) => {
   const [x, y, z] = book.position;
-  return Math.abs(x) > 6.5 || Math.abs(z) > 5.1 || y < 0 || y > 4.6 || book.position.some((value) => Number.isNaN(value));
+  return Math.abs(x) > room.width / 2 || Math.abs(z) > room.depth / 2 || y < 0 || y > room.height || book.position.some((value) => Number.isNaN(value));
 });
+const counts = new Map<string, number>();
+for (const book of SEED_BOOKS) counts.set(book.genre, (counts.get(book.genre) ?? 0) + 1);
 console.log(
   JSON.stringify(
     {
       placed: placed.length,
       real: real.length,
+      room: { width: room.width, depth: room.depth, height: room.height, home: room.home },
       plaques: plaques.map((plaque) => plaque.label),
+      counts: Object.fromEntries(counts),
       missing,
       badSpines,
       outside: outside.length,
-      lent: real.filter((book) => book.lent).length,
     },
     null,
     2,
   ),
 );
-if (missing.length || badSpines || outside.length || real.length !== SEED_BOOKS.length) {
+if (missing.length || badSpines || outside.length || real.length !== SEED_BOOKS.length || placed.length !== real.length) {
   process.exit(1);
 }

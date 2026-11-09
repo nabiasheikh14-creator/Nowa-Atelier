@@ -105,6 +105,36 @@ a { color: var(--brass); }
 .search em, .fallback li span:nth-child(2), .fallback li span:nth-child(3) { color: #cbbd9e; font-style: normal; }
 .search .empty { padding: 8px; color: #cbbd9e; }
 
+.rail {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 12px;
+  width: min(980px, 92vw);
+  margin-top: 8px;
+  pointer-events: auto;
+}
+.rail button {
+  background: transparent;
+  border: 0;
+  color: #e6d3a4;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.rail button:hover, .rail button.current { color: #fff6e4; }
+.rail button.current { box-shadow: inset 0 -1px 0 #b08d57; }
+
+.stage::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, 0.42) 100%);
+  z-index: 2;
+}
+
 .spine-tip {
   position: fixed;
   left: 0;
