@@ -42,7 +42,7 @@ export function LibraryScene({
 
   return (
     <Canvas
-      dpr={[1, 1.25]}
+      dpr={[1, 2]}
       camera={{ fov: 60, near: 0.08, far: 30, position: [0, 1.36, 2] }}
       gl={{
         antialias: true,

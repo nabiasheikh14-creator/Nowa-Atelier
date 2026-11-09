@@ -2,11 +2,13 @@ import * as THREE from "three";
 import type { Book } from "./types";
 import { hashString, mulberry32, range } from "./random";
 import { layoutRoom, type RoomPlan, type ShelfFrame } from "./room-plan";
+import { SPINE_ASPECT, spineArt } from "./spine-design";
 
 export type PlacedBook = {
   key: string;
   bookId: string | null;
   title: string;
+  author: string;
   position: [number, number, number];
   quaternion: [number, number, number, number];
   size: [number, number, number];
@@ -112,23 +114,26 @@ export function placeCollection(books: Book[]): {
       const row = rows[shelfIndex] ?? [];
       if (row.length === 0) return;
       const usable = frame.width - 0.08;
-      const thickness = Math.min(0.064, Math.max(0.038, (usable / row.length) * 0.86));
+      const heightGoal = 0.34;
+      const thickness = Math.min(heightGoal * SPINE_ASPECT, (usable * 0.94) / row.length);
+      const height = thickness / SPINE_ASPECT;
       const gap = (usable - thickness * row.length) / (row.length + 1);
       row.forEach((book, index) => {
         const rng = mulberry32(hashString(book.id));
-        const height = range(rng, 0.3, 0.38);
-        const depth = range(rng, 0.16, 0.21);
+        const depth = range(rng, 0.175, 0.21);
         const along = 0.04 + gap * (index + 1) + thickness * index + thickness / 2;
         const posed = pose(frame, along, shelfY + height / 2, depth);
+        const art = spineArt(book.title);
         placed.push({
           key: book.id,
           bookId: book.id,
           title: book.title,
+          author: book.author,
           position: posed.position,
           quaternion: posed.quaternion,
           size: [thickness, height, depth],
           normal: frame.normal,
-          color: CLOTH[Math.floor(rng() * CLOTH.length)] ?? CLOTH[0]!,
+          color: art.ground,
           coverUrl: book.cover_url,
           genre: frame.genre,
           template: -1,
