@@ -14,6 +14,24 @@ type DatabaseShape = {
 const FILE = path.join(process.cwd(), ".data", "library.json");
 
 let queue: Promise<unknown> = Promise.resolve();
+let memoryStore: DatabaseShape | null = null;
+
+function seedShape(): DatabaseShape {
+  return {
+    revision: SEED_REVISION,
+    books: SEED_BOOKS.map((book) => ({ ...book, owner_id: OWNER_ID })),
+    borrow_requests: [],
+  };
+}
+
+function memory(): DatabaseShape {
+  memoryStore ??= seedShape();
+  return memoryStore;
+}
+
+function readOnlyHost(): boolean {
+  return process.env.VERCEL === "1";
+}
 
 function enqueue<T>(task: () => Promise<T>): Promise<T> {
   const run = queue.then(task, task);
@@ -40,6 +58,7 @@ function isBook(value: unknown): value is Book {
 }
 
 async function readFileStore(): Promise<DatabaseShape> {
+  if (readOnlyHost()) return memory();
   try {
     const raw = await readFile(FILE, "utf8");
     const parsed = JSON.parse(raw) as DatabaseShape;
@@ -55,20 +74,28 @@ async function readFileStore(): Promise<DatabaseShape> {
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
     const reseed = code === "ENOENT" || error instanceof SyntaxError || (error instanceof Error && error.message === "bad store");
     if (!reseed) throw error;
-    const fresh: DatabaseShape = {
-      revision: SEED_REVISION,
-      books: SEED_BOOKS.map((book) => ({ ...book, owner_id: OWNER_ID })),
-      borrow_requests: [],
-    };
-    await mkdir(path.dirname(FILE), { recursive: true });
-    await writeFile(FILE, JSON.stringify(fresh, null, 2));
-    return fresh;
+    const fresh = seedShape();
+    try {
+      await mkdir(path.dirname(FILE), { recursive: true });
+      await writeFile(FILE, JSON.stringify(fresh, null, 2));
+    } catch {
+      memoryStore = fresh;
+    }
+    return memoryStore ?? fresh;
   }
 }
 
 async function writeFileStore(data: DatabaseShape): Promise<void> {
-  await mkdir(path.dirname(FILE), { recursive: true });
-  await writeFile(FILE, JSON.stringify(data, null, 2));
+  if (readOnlyHost()) {
+    memoryStore = data;
+    return;
+  }
+  try {
+    await mkdir(path.dirname(FILE), { recursive: true });
+    await writeFile(FILE, JSON.stringify(data, null, 2));
+  } catch {
+    memoryStore = data;
+  }
 }
 
 function usingSupabase(): boolean {
