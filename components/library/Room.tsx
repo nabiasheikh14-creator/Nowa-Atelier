@@ -5,7 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { RoomPlan, ShelfFrame } from "@/lib/room-plan";
 import { buildShelfGeometry, buildShellGeometry } from "./build-room";
-import { makeFloorTexture, makeGlobeTexture } from "./textures";
+import { makeFloorTexture, makeGlobeTexture, makeNightTexture, makeRainTexture } from "./textures";
 
 /** The rug photo is 1252 × 736 after rotating, so it lies along the wall. */
 const RUG_ASPECT = 736 / 1252;
@@ -83,24 +83,74 @@ export function Room({ room, frames }: { room: RoomPlan; frames: ShelfFrame[] })
 
 function Window({ room }: { room: RoomPlan }) {
   const x = -room.inner.x + 0.02;
+  const night = useMemo(() => makeNightTexture(), []);
+  const rain = useMemo(() => makeRainTexture(), []);
+  const W = 0.85;
+  const H = 1.15;
+  const glass = useRef<THREE.MeshBasicMaterial>(null);
+  // Rain slides slowly down the glass.
+  useFrame((_, delta) => {
+    const map = glass.current?.map;
+    if (map) map.offset.y += delta * 0.05;
+  });
+  const frameMat = <meshStandardMaterial color={"#2a1c12"} roughness={0.55} />;
   return (
     <group position={[x, 1.42, -0.05]} rotation={[0, Math.PI / 2, 0]}>
-      <mesh>
-        <planeGeometry args={[0.85, 1.15]} />
-        <meshStandardMaterial color={"#c5d4e6"} transparent opacity={0.22} roughness={0.15} metalness={0.05} />
+      {/* the night outside */}
+      <mesh position={[0, 0, 0.004]}>
+        <planeGeometry args={[W, H]} />
+        <meshBasicMaterial map={night} color={"#c9cfdc"} toneMapped={false} />
       </mesh>
+      {/* glass with rain on it */}
+      <mesh position={[0, 0, 0.012]}>
+        <planeGeometry args={[W, H]} />
+        <meshBasicMaterial ref={glass} map={rain} transparent opacity={0.85} depthWrite={false} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0, 0.008]}>
+        <planeGeometry args={[W, H]} />
+        <meshStandardMaterial color={"#9fb4cf"} transparent opacity={0.06} roughness={0.05} metalness={0.2} depthWrite={false} />
+      </mesh>
+      {/* mullions */}
       <mesh position={[0, 0, 0.02]}>
-        <boxGeometry args={[0.03, 1.15, 0.03]} />
-        <meshStandardMaterial color={"#1c140f"} metalness={0.35} roughness={0.4} />
+        <boxGeometry args={[0.028, H, 0.03]} />
+        {frameMat}
       </mesh>
-      <mesh position={[0, 0.22, 0.02]}>
-        <boxGeometry args={[0.85, 0.03, 0.03]} />
-        <meshStandardMaterial color={"#1c140f"} metalness={0.35} roughness={0.4} />
+      <mesh position={[0, 0.2, 0.02]}>
+        <boxGeometry args={[W, 0.028, 0.03]} />
+        {frameMat}
       </mesh>
-      <mesh position={[0.12, 0.42, -0.16]}>
-        <sphereGeometry args={[0.12, 16, 16]} />
-        <meshBasicMaterial color={"#e7eef8"} />
+      {/* casing and sill */}
+      {[
+        { p: [0, H / 2 + 0.03, 0.03] as [number, number, number], a: [W + 0.12, 0.06, 0.05] as [number, number, number] },
+        { p: [-(W / 2 + 0.03), 0, 0.03] as [number, number, number], a: [0.06, H + 0.12, 0.05] as [number, number, number] },
+        { p: [W / 2 + 0.03, 0, 0.03] as [number, number, number], a: [0.06, H + 0.12, 0.05] as [number, number, number] },
+      ].map((part, index) => (
+        <mesh key={index} position={part.p}>
+          <boxGeometry args={part.a} />
+          {frameMat}
+        </mesh>
+      ))}
+      <mesh position={[0, -H / 2 - 0.035, 0.07]}>
+        <boxGeometry args={[W + 0.2, 0.04, 0.14]} />
+        <meshStandardMaterial color={wood} roughness={0.5} />
       </mesh>
+      {/* velvet curtains, drawn back to either side */}
+      {[-1, 1].map((side) => (
+        <group key={side} position={[side * (W / 2 + 0.13), -0.08, 0.1]}>
+          {[0, 1, 2].map((fold) => (
+            <mesh key={fold} position={[side * (fold * 0.035 - 0.035), 0, (fold % 2) * 0.02]}>
+              <boxGeometry args={[0.05, H + 0.5, 0.03]} />
+              <meshStandardMaterial color={fold === 1 ? "#173226" : "#1c3b2d"} roughness={0.9} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      <mesh position={[0, H / 2 + 0.12, 0.12]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.012, 0.012, W + 0.5, 8]} />
+        <meshStandardMaterial color={brass} metalness={0.8} roughness={0.3} />
+      </mesh>
+      {/* a faint cool spill of moonlight into the room */}
+      <pointLight position={[0, 0.1, 0.5]} color={"#8fa6d6"} intensity={0.7} distance={2.2} decay={2} />
     </group>
   );
 }
@@ -151,27 +201,76 @@ function Chair({ room }: { room: RoomPlan }) {
   );
 }
 
+/** A round side table with a fabric-shaded lamp and two books, by the reading chair. */
 function SideTable({ room }: { room: RoomPlan }) {
+  const top = 0.56;
   return (
     <group position={[-room.inner.x + 0.46, 0, room.inner.z - 1.05]} scale={0.72}>
-      <mesh position={[0, 0.48, 0]}>
-        <cylinderGeometry args={[0.2, 0.2, 0.04, 16]} />
-        <meshStandardMaterial color={wood} roughness={0.48} />
+      {/* top with a moulded rim */}
+      <mesh position={[0, top, 0]}>
+        <cylinderGeometry args={[0.22, 0.22, 0.03, 32]} />
+        <meshStandardMaterial color={wood} roughness={0.42} />
       </mesh>
-      <mesh position={[0, 0.24, 0]}>
-        <cylinderGeometry args={[0.035, 0.05, 0.46, 8]} />
-        <meshStandardMaterial color={woodDark} roughness={0.55} />
+      <mesh position={[0, top - 0.022, 0]}>
+        <cylinderGeometry args={[0.205, 0.215, 0.016, 32]} />
+        <meshStandardMaterial color={woodDark} roughness={0.5} />
       </mesh>
-      <mesh position={[0, 0.72, 0]}>
-        <cylinderGeometry args={[0.08, 0.13, 0.12, 16, 1, true]} />
-        <meshStandardMaterial
-          color={"#5a3d22"}
-          emissive={"#ffb15e"}
-          emissiveIntensity={1.4}
-          side={THREE.DoubleSide}
-        />
+      {/* turned pedestal on three splayed feet */}
+      <mesh position={[0, top / 2, 0]}>
+        <cylinderGeometry args={[0.028, 0.045, top - 0.06, 12]} />
+        <meshStandardMaterial color={woodDark} roughness={0.5} />
       </mesh>
-      <pointLight position={[0, 0.7, 0]} color={"#ffb56a"} intensity={4} distance={3.2} decay={2} />
+      <mesh position={[0, top * 0.62, 0]}>
+        <sphereGeometry args={[0.045, 12, 10]} />
+        <meshStandardMaterial color={woodDark} roughness={0.5} />
+      </mesh>
+      {[0, (Math.PI * 2) / 3, (Math.PI * 4) / 3].map((turn, index) => (
+        <mesh key={index} position={[Math.cos(turn) * 0.1, 0.035, Math.sin(turn) * 0.1]} rotation={[0, -turn, 0.35]}>
+          <boxGeometry args={[0.2, 0.025, 0.035]} />
+          <meshStandardMaterial color={woodDark} roughness={0.5} />
+        </mesh>
+      ))}
+
+      {/* lamp: brass base and stem, pleated cream drum shade glowing from within */}
+      <group position={[-0.05, top + 0.015, -0.04]}>
+        <mesh position={[0, 0.03, 0]}>
+          <cylinderGeometry args={[0.045, 0.06, 0.06, 20]} />
+          <meshStandardMaterial color={brass} metalness={0.8} roughness={0.3} />
+        </mesh>
+        <mesh position={[0, 0.15, 0]}>
+          <cylinderGeometry args={[0.01, 0.01, 0.2, 8]} />
+          <meshStandardMaterial color={brass} metalness={0.8} roughness={0.3} />
+        </mesh>
+        <mesh position={[0, 0.3, 0]}>
+          <cylinderGeometry args={[0.075, 0.11, 0.14, 28, 1, true]} />
+          <meshStandardMaterial
+            color={"#e9dcc0"}
+            emissive={"#ffbf73"}
+            emissiveIntensity={0.55}
+            roughness={0.95}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        <mesh position={[0, 0.371, 0]}>
+          <torusGeometry args={[0.075, 0.004, 6, 28]} />
+          <meshStandardMaterial color={brass} metalness={0.8} roughness={0.3} />
+        </mesh>
+        <mesh position={[0, 0.229, 0]}>
+          <torusGeometry args={[0.11, 0.004, 6, 28]} />
+          <meshStandardMaterial color={brass} metalness={0.8} roughness={0.3} />
+        </mesh>
+        <pointLight position={[0, 0.26, 0]} color={"#ffb56a"} intensity={3.2} distance={3} decay={2} />
+      </group>
+
+      {/* two books, one left open-face down */}
+      <mesh position={[0.1, top + 0.03, 0.06]} rotation={[0, 0.4, 0]}>
+        <boxGeometry args={[0.15, 0.03, 0.1]} />
+        <meshStandardMaterial color={"#243044"} roughness={0.8} />
+      </mesh>
+      <mesh position={[0.11, top + 0.056, 0.07]} rotation={[0, -0.2, 0]}>
+        <boxGeometry args={[0.13, 0.022, 0.09]} />
+        <meshStandardMaterial color={"#7a3b2e"} roughness={0.8} />
+      </mesh>
     </group>
   );
 }

@@ -108,3 +108,134 @@ export function makeGlobeTexture(): THREE.CanvasTexture {
   }
   return canvasTexture(canvas);
 }
+
+/**
+ * The view through the window at night: deep blue sky, a few stars, a low moon
+ * glow, and a far skyline with a scatter of lit windows. Kept dark so it sits
+ * behind the room rather than competing with it.
+ */
+export function makeNightTexture(): THREE.CanvasTexture {
+  const w = 512;
+  const h = 704;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  let seed = 7;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, "#050a18");
+  sky.addColorStop(0.55, "#0d1a33");
+  sky.addColorStop(0.82, "#1b2a44");
+  sky.addColorStop(1, "#2a2a38");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, h);
+
+  for (let i = 0; i < 90; i++) {
+    const a = 0.25 + rand() * 0.55;
+    ctx.fillStyle = `rgba(220, 230, 255, ${a})`;
+    const r = rand() < 0.1 ? 1.4 : 0.8;
+    ctx.beginPath();
+    ctx.arc(rand() * w, rand() * h * 0.55, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const moonX = w * 0.68;
+  const moonY = h * 0.2;
+  const halo = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 150);
+  halo.addColorStop(0, "rgba(200, 214, 240, 0.32)");
+  halo.addColorStop(1, "rgba(200, 214, 240, 0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = "#e8edf6";
+  ctx.beginPath();
+  ctx.arc(moonX, moonY, 26, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#0d1a33";
+  ctx.beginPath();
+  ctx.arc(moonX + 11, moonY - 6, 24, 0, Math.PI * 2);
+  ctx.fill();
+
+  // far skyline, then nearer rooftops, each with a few lit windows
+  const layers = [
+    { base: h * 0.8, tall: 90, color: "#141b2b", lit: 0.07 },
+    { base: h * 0.9, tall: 70, color: "#0c111c", lit: 0.12 },
+  ];
+  for (const layer of layers) {
+    let x = -10;
+    while (x < w + 10) {
+      const bw = 24 + rand() * 46;
+      const bh = 20 + rand() * layer.tall;
+      const top = layer.base - bh;
+      ctx.fillStyle = layer.color;
+      ctx.fillRect(x, top, bw, h - top);
+      if (rand() < 0.18) ctx.fillRect(x + bw / 2 - 2, top - 14, 4, 14);
+      for (let wy = top + 8; wy < h - 6; wy += 10) {
+        for (let wx = x + 5; wx < x + bw - 6; wx += 8) {
+          if (rand() < layer.lit) {
+            const warm = rand() < 0.75;
+            ctx.fillStyle = warm ? `rgba(255, 196, 120, ${0.55 + rand() * 0.35})` : `rgba(190, 215, 255, ${0.4 + rand() * 0.3})`;
+            ctx.fillRect(wx, wy, 3, 4);
+          }
+        }
+      }
+      x += bw + rand() * 3;
+    }
+  }
+
+  // a little haze over the city
+  const haze = ctx.createLinearGradient(0, h * 0.7, 0, h);
+  haze.addColorStop(0, "rgba(120, 110, 140, 0)");
+  haze.addColorStop(1, "rgba(120, 100, 110, 0.18)");
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, h * 0.7, w, h * 0.3);
+  return canvasTexture(canvas);
+}
+
+/** Rain on the glass: thin streaks and a few beads, tiled and slid downward over time. */
+export function makeRainTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  let seed = 31;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  ctx.clearRect(0, 0, size, size);
+  for (let i = 0; i < 70; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const len = 8 + rand() * 26;
+    const streak = ctx.createLinearGradient(x, y, x + 1, y + len);
+    streak.addColorStop(0, "rgba(210, 225, 245, 0)");
+    streak.addColorStop(1, `rgba(210, 225, 245, ${0.18 + rand() * 0.22})`);
+    ctx.strokeStyle = streak;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 1, y + len);
+    ctx.stroke();
+    // wrap so the tile repeats cleanly
+    if (y + len > size) {
+      ctx.beginPath();
+      ctx.moveTo(x, y - size);
+      ctx.lineTo(x + 1, y + len - size);
+      ctx.stroke();
+    }
+  }
+  for (let i = 0; i < 40; i++) {
+    ctx.fillStyle = `rgba(220, 232, 250, ${0.12 + rand() * 0.2})`;
+    ctx.beginPath();
+    ctx.arc(rand() * size, rand() * size, 0.8 + rand() * 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const texture = canvasTexture(canvas, [2, 2.6]);
+  return texture;
+}
