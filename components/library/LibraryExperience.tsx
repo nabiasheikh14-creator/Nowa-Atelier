@@ -1,0 +1,460 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { Book } from "@/lib/types";
+import { GENRE_ORDER } from "@/lib/room-plan";
+import {
+  crossTags,
+  filterLabel,
+  matches,
+  profileOf,
+  shelfInfo,
+  tagsFor,
+  type Filter,
+} from "@/lib/genres";
+import { BookPopup } from "./BookPopup";
+import type { SectionLabel } from "./Books";
+import { FallbackLibrary } from "./FallbackLibrary";
+import { hoverTip } from "./input-state";
+import type { FocusRequest } from "./CameraRig";
+
+const LibraryScene = dynamic(() => import("./LibraryScene").then((mod) => mod.LibraryScene), { ssr: false });
+
+type Mode = "checking" | "room" | "small" | "webgl";
+
+/** Chips shown before "More" — enough to scan, few enough to read at a glance. */
+const CHIP_LIMIT = 7;
+
+let cachedMode: Mode | null = null;
+
+function readMode(): Mode {
+  if (cachedMode) return cachedMode;
+  if (window.innerWidth < 1100 || window.innerHeight < 700) {
+    cachedMode = "small";
+    return cachedMode;
+  }
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+    cachedMode = gl ? "room" : "webgl";
+  } catch {
+    cachedMode = "webgl";
+  }
+  return cachedMode;
+}
+
+function subscribeMode() {
+  return () => {};
+}
+
+export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
+  const [books] = useState(initialBooks);
+  const mode = useSyncExternalStore(subscribeMode, readMode, () => "checking" as Mode);
+  const [focus, setFocus] = useState<FocusRequest>(null);
+  const [popup, setPopup] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
+  const [skipIntro, setSkipIntro] = useState(false);
+  const [moved, setMoved] = useState(false);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>(null);
+  const [moreChips, setMoreChips] = useState(false);
+  const [peekId, setPeekId] = useState<string | null>(null);
+  const [audioOn, setAudioOn] = useState(false);
+  const [audioNote, setAudioNote] = useState<string | null>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const reducedMotion = useMemo(
+    () => (typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : false),
+    [],
+  );
+
+  useEffect(() => {
+    hoverTip.el = tipRef.current;
+    return () => {
+      hoverTip.el = null;
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!audioOn) {
+      audio.pause();
+      return;
+    }
+    void audio.play().catch(() => {
+      setAudioOn(false);
+      setAudioNote("Room tone isn't available right now.");
+    });
+  }, [audioOn]);
+
+  const results = useMemo(() => rank(books, query), [books, query]);
+  const genres = useMemo(() => {
+    const present = new Set(books.map((book) => book.genre));
+    const known = GENRE_ORDER.filter((genre) => present.has(genre));
+    const extra = [...present].filter((genre) => !known.includes(genre as (typeof GENRE_ORDER)[number]));
+    return [...known, ...extra];
+  }, [books]);
+
+  const matched = useMemo(() => (filter ? books.filter((book) => matches(book, filter)) : []), [books, filter]);
+  const litIds = useMemo(() => (filter ? new Set(matched.map((book) => book.id)) : null), [filter, matched]);
+
+  const shelfBooks = useMemo(
+    () => (filter?.kind === "shelf" ? books.filter((book) => matches(book, { kind: "shelf", shelf: filter.shelf, tag: null })) : []),
+    [books, filter],
+  );
+  const chips = useMemo(
+    () => (filter?.kind === "shelf" ? tagsFor(shelfBooks) : crossTags(books)),
+    [books, filter, shelfBooks],
+  );
+
+  const sections = useMemo(() => {
+    const out: Record<string, SectionLabel> = {};
+    for (const genre of genres) {
+      const here = books.filter((book) => book.genre === genre);
+      const lit = filter ? here.filter((book) => litIds?.has(book.id)).length : here.length;
+      const active = filter?.kind === "shelf" && filter.shelf === genre;
+      out[genre] = {
+        label: shelfInfo(genre).label,
+        count: filter && filter.kind === "tag" ? lit : here.length,
+        state: active ? "active" : filter && lit === 0 ? "muted" : "idle",
+      };
+    }
+    return out;
+  }, [books, filter, genres, litIds]);
+
+  const openBook = books.find((book) => book.id === focus?.id && popup) ?? null;
+
+  function choose(id: string) {
+    setPopup(false);
+    setQuery("");
+    setFocus({ id, intent: "highlight" });
+  }
+
+  function openFromShelf(id: string) {
+    setPopup(false);
+    setFocus({ id, intent: "open" });
+  }
+
+  function closeBook() {
+    setPopup(false);
+    setFocus(null);
+  }
+
+  const showRoom = useCallback(() => {
+    setPopup(false);
+    setQuery("");
+    setFilter(null);
+    setMoreChips(false);
+    setFocus({ id: "room", intent: "home" });
+  }, []);
+
+  const showShelf = useCallback((genre: string) => {
+    setPopup(false);
+    setQuery("");
+    setFilter({ kind: "shelf", shelf: genre, tag: null });
+    setMoreChips(false);
+    setFocus({ id: genre, intent: "section" });
+  }, []);
+
+  function pickTag(tag: string | null) {
+    setPopup(false);
+    setQuery("");
+    if (filter?.kind === "shelf") {
+      setFilter({ ...filter, tag: filter.tag === tag ? null : tag });
+      return;
+    }
+    if (!tag || (filter?.kind === "tag" && filter.tag === tag)) {
+      showRoom();
+      return;
+    }
+    const next: Filter = { kind: "tag", tag };
+    setFilter(next);
+    const ids = books.filter((book) => matches(book, next)).map((book) => book.id);
+    setFocus({ id: `tag:${tag}`, intent: "frame", ids });
+  }
+
+  function applyFromBook(next: Filter) {
+    if (!next) return;
+    setPopup(false);
+    setFocus(null);
+    if (next.kind === "shelf") {
+      showShelf(next.shelf);
+      return;
+    }
+    setFilter(next);
+    setMoreChips(false);
+    const ids = books.filter((book) => matches(book, next)).map((book) => book.id);
+    setFocus({ id: `tag:${next.tag}`, intent: "frame", ids });
+  }
+
+  // Escape steps back one level: subgenre → shelf → whole room. The open book handles its own Escape.
+  useEffect(() => {
+    if (popup) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (event.target instanceof HTMLInputElement && query) {
+        setQuery("");
+        return;
+      }
+      if (filter?.kind === "shelf" && filter.tag) setFilter({ ...filter, tag: null });
+      else if (filter) showRoom();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [filter, popup, query, showRoom]);
+
+  if (mode === "checking") {
+    return (
+      <main className="boot">
+        <p>The Library</p>
+      </main>
+    );
+  }
+  if (mode === "small" || mode === "webgl") {
+    return <FallbackLibrary books={books} reason={mode === "small" ? "small" : "webgl"} />;
+  }
+
+  const shelf = filter?.kind === "shelf" ? shelfInfo(filter.shelf) : null;
+  const elsewhere = filter?.kind === "shelf" ? matched.filter((book) => book.genre !== filter.shelf) : [];
+  const listed = filter?.kind === "tag" || (filter?.kind === "shelf" && filter.tag) ? matched : elsewhere;
+  const visibleChips = moreChips ? chips : chips.slice(0, CHIP_LIMIT);
+  const activeTag = filter?.kind === "tag" ? filter.tag : filter?.kind === "shelf" ? filter.tag : null;
+
+  return (
+    <main className={`stage ${popup ? "book-open" : ""}`}>
+      <LibraryScene
+        books={books}
+        focus={focus}
+        popup={popup}
+        reducedMotion={reducedMotion}
+        skipIntro={skipIntro}
+        litIds={litIds}
+        peekId={peekId}
+        sections={sections}
+        onShelf={showShelf}
+        onOpen={openFromShelf}
+        onArrive={() => setPopup(true)}
+        onIntroDone={() => setIntroDone(true)}
+        onInteract={() => {
+          setMoved(true);
+          setFocus((current) => (current?.intent === "highlight" ? null : current));
+        }}
+      />
+      <div ref={tipRef} className="spine-tip" />
+      <header className="hud" aria-hidden={popup}>
+        <div className="hud-left">
+          <form
+            className="search"
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const best = results[0];
+              if (best) choose(best.book.id);
+            }}
+          >
+            <label>
+              <span>Search</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Title, author, or subgenre"
+                aria-label="Search the shelves"
+              />
+            </label>
+            {query.trim() && (
+              <ul>
+                {results.length === 0 && (
+                  <li className="empty">
+                    Nothing on the shelves matches “{query.trim()}”. Try an author, or a subgenre like magical realism.
+                  </li>
+                )}
+                {results.map(({ book }) => (
+                  <li key={book.id}>
+                    <button type="button" onClick={() => choose(book.id)}>
+                      <strong>{book.title}</strong>
+                      <em>
+                        {book.author} · {shelfInfo(book.genre).label}
+                      </em>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </form>
+
+          {filter && !query.trim() && listed.length > 0 && (
+            <section className="results" aria-live="polite">
+              <header>
+                <p>
+                  <strong>{filter.kind === "shelf" && !filter.tag ? "Also on this list" : filterLabel(filter)}</strong>
+                  <span>
+                    {filter.kind === "shelf" && !filter.tag
+                      ? `${listed.length} shelved elsewhere`
+                      : `${listed.length} ${listed.length === 1 ? "book" : "books"}, lit on the wall`}
+                  </span>
+                </p>
+                <button type="button" className="clear" onClick={showRoom}>
+                  Clear
+                </button>
+              </header>
+              <ul>
+                {listed.map((book) => (
+                  <li key={book.id}>
+                    <button
+                      type="button"
+                      onClick={() => choose(book.id)}
+                      onMouseEnter={() => setPeekId(book.id)}
+                      onMouseLeave={() => setPeekId(null)}
+                      onFocus={() => setPeekId(book.id)}
+                      onBlur={() => setPeekId(null)}
+                    >
+                      <strong>{book.title}</strong>
+                      <em>
+                        {book.author}
+                        {(filter.kind === "tag" || book.genre !== filter.shelf) && <> · on {shelfInfo(book.genre).label}</>}
+                      </em>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+
+        <nav className="hud-right" aria-label="Shelves">
+          <div className="rail">
+            <button type="button" className={!filter ? "current" : ""} aria-current={!filter} onClick={showRoom}>
+              Whole room
+            </button>
+            {genres.map((genre) => {
+              const info = shelfInfo(genre);
+              const current = filter?.kind === "shelf" && filter.shelf === genre;
+              return (
+                <button
+                  key={genre}
+                  type="button"
+                  title={info.name}
+                  className={current ? "current" : ""}
+                  aria-current={current}
+                  onClick={() => showShelf(genre)}
+                >
+                  {info.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="subrail">
+            <p className="context" title={shelf ? shelf.blurb : undefined}>
+              {shelf ? (
+                <>
+                  <strong>{shelf.name}</strong>
+                  <span>
+                    {shelfBooks.length} books
+                    {elsewhere.length > 0 && <> · {elsewhere.length} shelved elsewhere</>}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <strong>Browse by subgenre</strong>
+                </>
+              )}
+            </p>
+            {chips.length > 0 && (
+              <div className="chips" role="group" aria-label="Subgenres">
+                {shelf && (
+                  <button type="button" className={!activeTag ? "on" : ""} aria-pressed={!activeTag} onClick={() => pickTag(null)}>
+                    All
+                  </button>
+                )}
+                {visibleChips.map(({ tag, count }) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={activeTag === tag ? "on" : ""}
+                    aria-pressed={activeTag === tag}
+                    onClick={() => pickTag(tag)}
+                  >
+                    {tag}
+                    <em>{count}</em>
+                  </button>
+                ))}
+                {chips.length > CHIP_LIMIT && (
+                  <button type="button" className="more" aria-expanded={moreChips} onClick={() => setMoreChips((value) => !value)}>
+                    {moreChips ? "Fewer" : `${chips.length - CHIP_LIMIT} more`}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </nav>
+      </header>
+      {!introDone && (
+        <button className="intro" type="button" onClick={() => setSkipIntro(true)}>
+          <span>A private collection</span>
+          <strong>The Library</strong>
+          <em>Enter</em>
+        </button>
+      )}
+      {introDone && (
+        <p className={`hint ${moved ? "quiet" : ""}`}>
+          Drag to look · A / D to walk · Scroll to step closer · Click a spine to open it
+        </p>
+      )}
+      <button
+        className={`tone ${audioOn ? "on" : ""}`}
+        type="button"
+        aria-pressed={audioOn}
+        onClick={() => {
+          setAudioNote(null);
+          setAudioOn((value) => !value);
+        }}
+      >
+        <i aria-hidden="true" />
+        Room tone
+      </button>
+      {audioNote && (
+        <p className="tone-note" role="status">
+          {audioNote}
+        </p>
+      )}
+      <audio
+        ref={audioRef}
+        src="/audio/ambience.wav"
+        loop
+        preload="none"
+        onError={() => {
+          setAudioOn(false);
+          setAudioNote("Room tone isn't available right now.");
+        }}
+      />
+      {openBook && <BookPopup book={openBook} onClose={closeBook} onFilter={applyFromBook} />}
+    </main>
+  );
+}
+
+function rank(books: Book[], query: string): { book: Book; score: number }[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+  return books
+    .map((book) => {
+      const title = book.title.toLowerCase();
+      const author = book.author.toLowerCase();
+      const profile = profileOf(book);
+      const shelves = profile.shelves.map((id) => `${id} ${shelfInfo(id).label}`).join(" ").toLowerCase();
+      const kinds = [...profile.tags, ...profile.subgenres].join(" ").toLowerCase();
+      let score = 0;
+      if (title === needle) score = 100;
+      else if (title.startsWith(needle)) score = 86;
+      else if (title.includes(needle)) score = 74;
+      else if (author.includes(needle)) score = 60;
+      else if (shelves.includes(needle)) score = 46;
+      else if (kinds.includes(needle)) score = 40;
+      return { book, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.book.title.localeCompare(b.book.title))
+    .slice(0, 6);
+}
