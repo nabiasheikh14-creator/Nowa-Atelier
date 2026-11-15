@@ -11,7 +11,11 @@ export const GENRE_ORDER = [
   "East Asian",
   "Memoir",
   "Mind",
+  "History",
+  "Science",
+  "Art",
   "Reference",
+  "Other",
 ] as const;
 
 // Four shelves, floor to near ceiling: a library wall, and room for bigger collections.

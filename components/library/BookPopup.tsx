@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Book } from "@/lib/types";
 import { profileOf, shelfInfo, type Filter } from "@/lib/genres";
 import { spineArt } from "@/lib/spine-design";
+import { OwnerNotes } from "@/components/rooms/OwnerNotes";
 
 type Borrow =
   | { step: "idle" }
@@ -15,10 +16,13 @@ export function BookPopup({
   book,
   onClose,
   onFilter,
+  owner,
 }: {
   book: Book;
   onClose: () => void;
   onFilter?: (filter: Filter) => void;
+  /** Present when the viewer owns this room: lets them rate, review, move, and remove. */
+  owner?: { onSaved: (book: Book) => void; onRemoved: (id: string) => void };
 }) {
   const [borrow, setBorrow] = useState<Borrow>({ step: "idle" });
   const [shared, setShared] = useState<"idle" | "copied" | "failed">("idle");
@@ -41,7 +45,9 @@ export function BookPopup({
 
   const profile = profileOf(book);
   const others = profile.shelves.filter((id) => id !== book.genre);
-  const canBorrow = book.format === "physical" && book.status === "available";
+  const canBorrow = !owner && book.format === "physical" && book.status === "available" && book.reading_status !== "to-read";
+  const statusLabel =
+    book.reading_status === "reading" ? "Reading now" : book.reading_status === "read" ? "Read" : book.reading_status === "to-read" ? "Want to read" : null;
   const cloth = spineArt(book.title).ground;
   const lightCloth = luminance(cloth) > 0.45;
 
@@ -144,8 +150,9 @@ export function BookPopup({
             <p className="kicker">{shelfInfo(book.genre).name}</p>
             <h2 id="book-title">{book.title}</h2>
             <p className="author">{book.author}</p>
-            {(book.format === "epub" || book.rating !== null) && (
+            {(book.format === "epub" || book.rating !== null || statusLabel) && !owner && (
               <p className="meta-row">
+                {statusLabel && <span className={`badge status ${book.reading_status}`}>{statusLabel}</span>}
                 {book.format === "epub" && <span className="badge epub">Ebook</span>}
                 {book.rating !== null && <Stars value={book.rating} />}
               </p>
@@ -155,7 +162,8 @@ export function BookPopup({
           {borrow.step === "idle" || borrow.step === "sent" ? (
             <>
               {book.synopsis && <p className="synopsis">{book.synopsis}</p>}
-              {book.review && (
+              {owner && <OwnerNotes key={book.id} book={book} onSaved={owner.onSaved} onRemoved={owner.onRemoved} />}
+              {book.review && !owner && (
                 <blockquote>
                   <span>A note in the margin</span>
                   {book.review}
@@ -209,6 +217,8 @@ export function BookPopup({
                   <button className="ink-button" type="button" onClick={() => setBorrow({ step: "form", error: null })}>
                     Ask to borrow this
                   </button>
+                ) : owner ? null : book.reading_status === "to-read" ? (
+                  <p className="aside">On the wish list, not on the shelf yet.</p>
                 ) : book.format === "physical" ? (
                   <p className="aside">This copy is out on loan right now.</p>
                 ) : (

@@ -1,5 +1,6 @@
 export type BookFormat = "physical" | "epub";
 export type BookStatus = "available" | "lent";
+export type ReadingStatus = "owned" | "reading" | "read" | "to-read";
 export type RequestStatus = "pending" | "approved" | "declined";
 
 export type Book = {
@@ -16,6 +17,22 @@ export type Book = {
   isbn: string | null;
   status: BookStatus;
   created_at: string;
+  /** Every list this book belongs to; the first is where it stands. Absent on old data. */
+  shelves?: string[];
+  /** Subgenre words, as the owner (or the classifier) wrote them. */
+  subgenres?: string[];
+  reading_status?: ReadingStatus;
+  started_at?: string | null;
+  finished_at?: string | null;
+};
+
+export type Room = {
+  id: string;
+  handle: string;
+  display_name: string;
+  bio: string | null;
+  visibility: "private" | "unlisted" | "public";
+  claimed: boolean;
 };
 
 export type BorrowRequest = {

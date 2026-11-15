@@ -1,12 +1,12 @@
 import type { Book } from "./types";
-import { OWNER_ID } from "./owner";
+import { FOUNDER } from "./founder";
 import coverIndex from "./cover-index.json";
 import { synopsisFor } from "./synopses";
 
 const covers = coverIndex as Record<string, number>;
 const copyCount = new Map<string, number>();
 
-const owner = OWNER_ID;
+const owner = FOUNDER.id;
 
 type Draft = {
   title: string;
