@@ -14,7 +14,6 @@ import {
   type Filter,
 } from "@/lib/genres";
 import { BookPopup } from "./BookPopup";
-import type { SectionLabel } from "./Books";
 import { FallbackLibrary } from "./FallbackLibrary";
 import { hoverTip } from "./input-state";
 import type { FocusRequest } from "./CameraRig";
@@ -98,7 +97,15 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
   }, [books]);
 
   const matched = useMemo(() => (filter ? books.filter((book) => matches(book, filter)) : []), [books, filter]);
-  const litIds = useMemo(() => (filter ? new Set(matched.map((book) => book.id)) : null), [filter, matched]);
+  // Hovering a shelf name in the rail previews that section on the wall without moving the camera.
+  const [previewShelf, setPreviewShelf] = useState<string | null>(null);
+  const litIds = useMemo(() => {
+    if (previewShelf) {
+      return new Set(books.filter((book) => matches(book, { kind: "shelf", shelf: previewShelf, tag: null })).map((book) => book.id));
+    }
+    return filter ? new Set(matched.map((book) => book.id)) : null;
+  }, [books, filter, matched, previewShelf]);
+  const activeShelf = previewShelf ?? (filter?.kind === "shelf" ? filter.shelf : null);
 
   const shelfBooks = useMemo(
     () => (filter?.kind === "shelf" ? books.filter((book) => matches(book, { kind: "shelf", shelf: filter.shelf, tag: null })) : []),
@@ -109,20 +116,6 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
     [books, filter, shelfBooks],
   );
 
-  const sections = useMemo(() => {
-    const out: Record<string, SectionLabel> = {};
-    for (const genre of genres) {
-      const here = books.filter((book) => book.genre === genre);
-      const lit = filter ? here.filter((book) => litIds?.has(book.id)).length : here.length;
-      const active = filter?.kind === "shelf" && filter.shelf === genre;
-      out[genre] = {
-        label: shelfInfo(genre).label,
-        count: filter && filter.kind === "tag" ? lit : here.length,
-        state: active ? "active" : filter && lit === 0 ? "muted" : "idle",
-      };
-    }
-    return out;
-  }, [books, filter, genres, litIds]);
 
   const openBook = books.find((book) => book.id === focus?.id && popup) ?? null;
 
@@ -219,7 +212,9 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
   const shelf = filter?.kind === "shelf" ? shelfInfo(filter.shelf) : null;
   const elsewhere = filter?.kind === "shelf" ? matched.filter((book) => book.genre !== filter.shelf) : [];
   const listed = filter?.kind === "tag" || (filter?.kind === "shelf" && filter.tag) ? matched : elsewhere;
-  const visibleChips = moreChips ? chips : chips.slice(0, CHIP_LIMIT);
+  // A shelf's long name shares the row with its chips, so it shows fewer before "more".
+  const chipLimit = shelf ? CHIP_LIMIT - 1 : CHIP_LIMIT;
+  const visibleChips = moreChips ? chips : chips.slice(0, chipLimit);
   const activeTag = filter?.kind === "tag" ? filter.tag : filter?.kind === "shelf" ? filter.tag : null;
 
   return (
@@ -232,7 +227,8 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
         skipIntro={skipIntro}
         litIds={litIds}
         peekId={peekId}
-        sections={sections}
+        shelfLabel={(genre) => shelfInfo(genre).label}
+        activeShelf={activeShelf}
         onShelf={showShelf}
         onOpen={openFromShelf}
         onArrive={() => setPopup(true)}
@@ -338,7 +334,14 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
                   title={info.name}
                   className={current ? "current" : ""}
                   aria-current={current}
-                  onClick={() => showShelf(genre)}
+                  onClick={() => {
+                    setPreviewShelf(null);
+                    showShelf(genre);
+                  }}
+                  onMouseEnter={() => setPreviewShelf(genre)}
+                  onMouseLeave={() => setPreviewShelf(null)}
+                  onFocus={() => setPreviewShelf(genre)}
+                  onBlur={() => setPreviewShelf(null)}
                 >
                   {info.label}
                 </button>
@@ -346,16 +349,13 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
             })}
           </div>
 
-          <div className="subrail">
-            <p className="context" title={shelf ? shelf.blurb : undefined}>
+          <div className={`subrail ${moreChips ? "open" : ""}`}>
+            <p className="context" title={shelf ? `${shelf.name}. ${shelf.blurb}` : undefined}>
               {shelf ? (
-                <>
-                  <strong>{shelf.name}</strong>
-                  <span>
-                    {shelfBooks.length} books
-                    {elsewhere.length > 0 && <> · {elsewhere.length} shelved elsewhere</>}
-                  </span>
-                </>
+                <span>
+                  {shelfBooks.length} books
+                  {elsewhere.length > 0 && <> · {elsewhere.length} shelved elsewhere</>}
+                </span>
               ) : (
                 <>
                   <strong>Browse by subgenre</strong>
@@ -381,9 +381,9 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
                     <em>{count}</em>
                   </button>
                 ))}
-                {chips.length > CHIP_LIMIT && (
+                {chips.length > chipLimit && (
                   <button type="button" className="more" aria-expanded={moreChips} onClick={() => setMoreChips((value) => !value)}>
-                    {moreChips ? "Fewer" : `${chips.length - CHIP_LIMIT} more`}
+                    {moreChips ? "Fewer" : `${chips.length - chipLimit} more`}
                   </button>
                 )}
               </div>

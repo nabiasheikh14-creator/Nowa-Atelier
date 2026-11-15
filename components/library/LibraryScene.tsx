@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import type { Book } from "@/lib/types";
 import { placeCollection } from "@/lib/placement";
-import { Books, type SectionLabel } from "./Books";
+import { Books } from "./Books";
 import { CameraRig, type FocusRequest } from "./CameraRig";
 import { Dust } from "./Dust";
 import { Room } from "./Room";
@@ -22,12 +22,14 @@ export function LibraryScene({
   onInteract,
   litIds,
   peekId,
-  sections,
+  shelfLabel,
+  activeShelf,
   onShelf,
 }: {
   litIds: Set<string> | null;
   peekId: string | null;
-  sections: Record<string, SectionLabel>;
+  shelfLabel: (genre: string) => string;
+  activeShelf: string | null;
   onShelf: (genre: string) => void;
   books: Book[];
   focus: FocusRequest;
@@ -74,7 +76,8 @@ export function LibraryScene({
         focusId={focus?.id ?? null}
         litIds={litIds}
         peekId={peekId}
-        sections={sections}
+        shelfLabel={shelfLabel}
+        activeShelf={activeShelf}
         onOpen={onOpen}
         onShelf={onShelf}
       />

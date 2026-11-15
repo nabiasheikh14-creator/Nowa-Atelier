@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Source_Serif_4 } from "next/font/google";
+import { Source_Serif_4 } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const display = Cormorant_Garamond({
-  subsets: ["latin", "latin-ext"],
-  weight: ["500", "600", "700"],
+// Scope One (Dalton Maag, OFL) is self-hosted so the room never waits on a font CDN.
+const display = localFont({
+  src: "../public/fonts/ScopeOne-Regular.ttf",
   variable: "--font-display",
+  display: "swap",
 });
 
 const body = Source_Serif_4({

@@ -5,7 +5,10 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { RoomPlan, ShelfFrame } from "@/lib/room-plan";
 import { buildShelfGeometry, buildShellGeometry } from "./build-room";
-import { makeFloorTexture, makeGlobeTexture, makeRugTexture } from "./textures";
+import { makeFloorTexture, makeGlobeTexture } from "./textures";
+
+/** The rug photo is 1252 × 736 after rotating, so it lies along the wall. */
+const RUG_ASPECT = 736 / 1252;
 
 const wood = "#3c2918";
 const woodDark = "#24160f";
@@ -15,7 +18,13 @@ const velvet = "#6c2432";
 
 export function Room({ room, frames }: { room: RoomPlan; frames: ShelfFrame[] }) {
   const floor = useMemo(() => makeFloorTexture(), []);
-  const rug = useMemo(() => makeRugTexture(), []);
+  const rug = useMemo(() => {
+    const texture = new THREE.TextureLoader().load("/textures/rug.jpg");
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
+    return texture;
+  }, []);
+  const rugWidth = Math.min(2.6, room.width * 0.55);
   const globe = useMemo(() => makeGlobeTexture(), []);
   const shelves = useMemo(() => buildShelfGeometry(frames), [frames]);
   const shell = useMemo(() => buildShellGeometry(room), [room]);
@@ -58,9 +67,10 @@ export function Room({ room, frames }: { room: RoomPlan; frames: ShelfFrame[] })
       </mesh>
       <Window room={room} />
       <Fireplace room={room} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0.2]}>
-        <planeGeometry args={[Math.min(2.4, room.width * 0.55), 1.5]} />
-        <meshStandardMaterial map={rug} roughness={0.95} />
+      {/* Laid just in front of the shelves, where the camera can actually see it. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, -room.inner.z + 0.26 + 0.14 + (rugWidth * RUG_ASPECT) / 2]}>
+        <planeGeometry args={[rugWidth, rugWidth * RUG_ASPECT]} />
+        <meshStandardMaterial map={rug} roughness={0.96} />
       </mesh>
       <Chair room={room} />
       <SideTable room={room} />

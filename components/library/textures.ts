@@ -70,46 +70,6 @@ export function makeFloorTexture(): THREE.CanvasTexture {
   return canvasTexture(canvas, [3.2, 3.2]);
 }
 
-export function makeRugTexture(): THREE.CanvasTexture {
-  const size = 1024;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#5c1e2c";
-  ctx.fillRect(0, 0, size, size);
-  ctx.strokeStyle = "#2a1016";
-  ctx.lineWidth = 54;
-  ctx.strokeRect(27, 27, size - 54, size - 54);
-  ctx.strokeStyle = "#c6a15e";
-  ctx.lineWidth = 4;
-  ctx.strokeRect(70, 70, size - 140, size - 140);
-  ctx.strokeStyle = "#8d6a3e";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(92, 92, size - 184, size - 184);
-  ctx.fillStyle = "#4a1824";
-  ctx.beginPath();
-  ctx.moveTo(size / 2, 250);
-  ctx.lineTo(size - 250, size / 2);
-  ctx.lineTo(size / 2, size - 250);
-  ctx.lineTo(250, size / 2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = "#d7b56a";
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, 70, 0, Math.PI * 2);
-  ctx.fillStyle = "#6e2433";
-  ctx.fill();
-  ctx.stroke();
-  for (let i = 0; i < 1800; i++) {
-    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.08})`;
-    ctx.fillRect(Math.random() * size, Math.random() * size, 2, 2);
-  }
-  return canvasTexture(canvas);
-}
-
 export function makeGlobeTexture(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 512;

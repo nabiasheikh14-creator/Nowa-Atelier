@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
-import { Html, Text } from "@react-three/drei";
+import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { type Plaque, type PlacedBook } from "@/lib/placement";
 import { SPINE_ASPECT, spineArt, spineAuthor, spineTitle, type SpineArt, type SpineMark } from "@/lib/spine-design";
@@ -346,15 +346,14 @@ function makeSpineMaterial(atlas: Atlas): THREE.ShaderMaterial {
   });
 }
 
-export type SectionLabel = { label: string; count: number; state: "idle" | "active" | "muted" };
-
 export function Books({
   placed,
   plaques,
   focusId,
   litIds,
   peekId,
-  sections,
+  shelfLabel,
+  activeShelf,
   onOpen,
   onShelf,
 }: {
@@ -365,12 +364,13 @@ export function Books({
   litIds: Set<string> | null;
   /** A spine to nudge forward, e.g. while its row is hovered in the results list. */
   peekId: string | null;
-  sections: Record<string, SectionLabel>;
+  /** Display name of a shelf, for the hover tip. */
+  shelfLabel: (genre: string) => string;
+  /** The shelf currently chosen or previewed; its plaque glows. */
+  activeShelf: string | null;
   onOpen: (id: string) => void;
   onShelf: (genre: string) => void;
 }) {
-  const [far, setFar] = useState(true);
-  const farRef = useRef(true);
   const litRef = useRef(litIds);
   const peekRef = useRef(peekId);
   const [atlas, setAtlas] = useState<Atlas | null>(null);
@@ -518,13 +518,7 @@ export function Books({
     if (lent.length) current.instanceMatrix.needsUpdate = true;
   }, [dummy, lent]);
 
-  useFrame((state, delta) => {
-    const wallZ = plaques[0]?.position[2] ?? 0;
-    const isFar = state.camera.position.z - wallZ > 1.45;
-    if (isFar !== farRef.current) {
-      farRef.current = isFar;
-      setFar(isFar);
-    }
+  useFrame((_, delta) => {
     const current = mesh.current;
     if (!current) return;
     const hover = hoverIndex.current;
@@ -624,7 +618,7 @@ export function Books({
     const canvas = event.nativeEvent.target as HTMLElement;
     hoverIndex.current = index;
     lastHover.current = { index, x: event.nativeEvent.clientX, y: event.nativeEvent.clientY };
-    hoverTip.show(book.title, book.author, event.nativeEvent.clientX, event.nativeEvent.clientY);
+    hoverTip.show(book.title, `${book.author} · ${shelfLabel(book.genre)}`, event.nativeEvent.clientX, event.nativeEvent.clientY);
     canvas.style.cursor = book.bookId ? "pointer" : "default";
   }
 
@@ -655,13 +649,35 @@ export function Books({
         </instancedMesh>
       )}
       {plaques.map((plaque) => (
-        <group key={plaque.id} position={plaque.position} rotation={[0, plaque.yaw, 0]} raycast={() => null}>
-          <mesh>
-            <boxGeometry args={[Math.max(0.16, plaque.width - 0.02), 0.09, 0.012]} />
-            <meshStandardMaterial color={"#b08d57"} metalness={0.74} roughness={0.3} />
+        <group key={plaque.id} position={plaque.position} rotation={[0, plaque.yaw, 0]}>
+          <mesh
+            onClick={(event) => {
+              event.stopPropagation();
+              onShelf(plaque.genre);
+            }}
+            onPointerOver={(event) => {
+              // A plaque click must not fall through to the book that was hovered a moment ago.
+              lastHover.current = null;
+              (event.nativeEvent.target as HTMLElement).style.cursor = "pointer";
+              hoverTip.show(plaque.label, "Go to this shelf", event.nativeEvent.clientX, event.nativeEvent.clientY);
+            }}
+            onPointerOut={(event) => {
+              (event.nativeEvent.target as HTMLElement).style.cursor = "";
+              hoverTip.hide();
+            }}
+          >
+            <boxGeometry args={[Math.max(0.14, plaque.width - 0.02), 0.09, 0.012]} />
+            <meshStandardMaterial
+              color={activeShelf === plaque.genre ? "#e2bf7d" : "#b08d57"}
+              emissive={activeShelf === plaque.genre ? "#8a6232" : "#000000"}
+              emissiveIntensity={activeShelf === plaque.genre ? 0.6 : 0}
+              metalness={0.74}
+              roughness={0.3}
+            />
           </mesh>
           <Text
-            font="/fonts/CormorantGaramond-Medium.ttf"
+            raycast={() => null}
+            font="/fonts/ScopeOne-Regular.ttf"
             position={[0, -0.002, 0.01]}
             fontSize={plaque.width < 0.34 ? 0.015 : 0.02}
             color={"#3a2914"}
@@ -675,30 +691,6 @@ export function Books({
           </Text>
         </group>
       ))}
-      {plaques.map((plaque) => {
-        const section = sections[plaque.genre];
-        if (!section) return null;
-        return (
-          <Html
-            key={`label-${plaque.id}`}
-            position={[plaque.position[0], -0.06, plaque.position[2] + 0.04]}
-            center
-            zIndexRange={[5, 0]}
-            className={`shelf-label ${far ? "show" : ""} ${section.state}`}
-          >
-            <button
-              type="button"
-              tabIndex={far ? 0 : -1}
-              aria-hidden={!far}
-              onClick={() => onShelf(plaque.genre)}
-              aria-label={`${section.label}, ${section.count} ${section.count === 1 ? "book" : "books"}`}
-            >
-              <span>{section.label}</span>
-              <em>{section.count}</em>
-            </button>
-          </Html>
-        );
-      })}
     </group>
   );
 }
