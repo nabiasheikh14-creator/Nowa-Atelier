@@ -44,14 +44,16 @@ function framePose(books: PlacedBook[], room: RoomPlan): Pose {
   // Fit all three shelves top to bottom, not only the eye-level row. Vertical fov is 60°.
   const bottom = Math.min(...books.map((book) => book.position[1] - book.size[1] / 2)) - 0.04;
   const top = Math.max(...books.map((book) => book.position[1] + book.size[1] / 2)) + 0.06;
-  const tall = Math.max(1.3, top - bottom);
+  // At most about three shelves tall, centred near eye level, so a section is close enough to read.
+  const tall = THREE.MathUtils.clamp(top - bottom, 1.3, 1.55);
   const across = span / 2 / Math.tan(halfHorizontal) + 0.38;
   // The header covers roughly the top seventh of the window, so leave room above the top shelf.
   const upright = (tall * 1.16) / 2 / Math.tan((30 * Math.PI) / 180) + 0.05;
   const dist = Math.max(across, upright);
   const front = books[0]!.position[2] + books[0]!.size[2] / 2;
   const spot = clampCamera(center, front + dist, room);
-  return { x: spot.x, y: (top + bottom) / 2 + 0.1, z: spot.z, yaw: 0, pitch: -0.02 };
+  const y = THREE.MathUtils.clamp((top + bottom) / 2 + 0.1, 1.15, 1.45);
+  return { x: spot.x, y, z: spot.z, yaw: 0, pitch: -0.02 };
 }
 
 function viewpoint(book: PlacedBook, room: RoomPlan): Pose {
@@ -65,7 +67,7 @@ function viewpoint(book: PlacedBook, room: RoomPlan): Pose {
     ],
   };
   const spot = clampCamera(aimed.position[0], aimed.position[2] + 1.05, room);
-  const y = THREE.MathUtils.clamp(aimed.position[1] + 0.06, 1.08, 1.72);
+  const y = THREE.MathUtils.clamp(aimed.position[1] + 0.06, 0.9, 2.0);
   return poseLookingAt(spot.x, y, spot.z, aimed);
 }
 

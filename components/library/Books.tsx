@@ -356,6 +356,7 @@ export function Books({
   activeShelf,
   onOpen,
   onShelf,
+  day,
 }: {
   placed: PlacedBook[];
   plaques: Plaque[];
@@ -370,7 +371,9 @@ export function Books({
   activeShelf: string | null;
   onOpen: (id: string) => void;
   onShelf: (genre: string) => void;
+  day?: boolean;
 }) {
+  const dayRef = useRef(day ?? false);
   const litRef = useRef(litIds);
   const peekRef = useRef(peekId);
   const [atlas, setAtlas] = useState<Atlas | null>(null);
@@ -393,7 +396,8 @@ export function Books({
     placedRef.current = placed;
     litRef.current = litIds;
     peekRef.current = peekId;
-  }, [focusId, onOpen, placed, litIds, peekId]);
+    dayRef.current = day ?? false;
+  }, [focusId, onOpen, placed, litIds, peekId, day]);
 
   const raycast = useCallback((raycaster: THREE.Raycaster, intersects: THREE.Intersection[]) => {
     const current = mesh.current;
@@ -524,13 +528,20 @@ export function Books({
     const hover = hoverIndex.current;
     const focus = focusRef.current;
     const lit = litRef.current;
+    // The spine shader has its own light terms; brighten them by day.
+    const spineMaterial = (Array.isArray(current.material) ? current.material[4] : null) as THREE.ShaderMaterial | null;
+    const ambient = spineMaterial?.uniforms?.uAmbient?.value as THREE.Color | undefined;
+    if (ambient) {
+      const goal = dayRef.current ? 1.4 : 1.05;
+      if (Math.abs(ambient.r - goal) > 0.001) ambient.setScalar(THREE.MathUtils.damp(ambient.r, goal, 6, delta));
+    }
     const peek = peekRef.current;
     if (current.instanceColor) {
       let shadeDirty = false;
       for (let index = 0; index < placed.length; index++) {
         const book = placed[index]!;
         const on = !lit || (book.bookId !== null && lit.has(book.bookId));
-        const goal = on ? book.shade : book.shade * 0.22;
+        const goal = on ? book.shade : book.shade * (dayRef.current ? 0.1 : 0.22);
         const now = shadeNow.current[index] ?? book.shade;
         if (Math.abs(now - goal) < 0.002) continue;
         const next = THREE.MathUtils.damp(now, goal, 10, delta);

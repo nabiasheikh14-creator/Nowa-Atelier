@@ -72,7 +72,10 @@ function pose(
   };
 }
 
+export type Bookend = { position: [number, number, number]; quaternion: [number, number, number, number] };
+
 export function placeCollection(books: Book[]): {
+  bookends: Bookend[];
   placed: PlacedBook[];
   plaques: Plaque[];
   frames: ShelfFrame[];
@@ -92,6 +95,7 @@ export function placeCollection(books: Book[]): {
 
   const placed: PlacedBook[] = [];
   const plaques: Plaque[] = [];
+  const bookends: Bookend[] = [];
 
   for (const frame of frames) {
     const owned = byGenre.get(frame.genre) ?? [];
@@ -103,29 +107,38 @@ export function placeCollection(books: Book[]): {
       width: frame.width,
         position: [
         frame.backLeft[0] + frame.run[0] * (frame.width / 2) + frame.normal[0] * (frame.depth - 0.02),
-        Math.max(...frame.shelfYs) + 0.48,
-        frame.backLeft[2] + frame.run[2] * (frame.width / 2) + frame.normal[2] * (frame.depth - 0.02),
+        2.27,
+        frame.backLeft[2] + frame.run[2] * (frame.width / 2) + frame.normal[2] * (frame.depth + 0.014),
       ],
     });
 
+    // Fill the eye-level shelf first, then the one below, then above, then the floor shelf,
+    // so a short section reads at a glance instead of sitting at your feet.
     const rows = frame.shelfYs.map(() => [] as Book[]);
+    const priority = [2, 1, 3, 0].filter((row) => row < frame.shelfYs.length);
     owned.forEach((book, index) => {
-      rows[index % frame.shelfYs.length]!.push(book);
+      rows[priority[index % priority.length]!]!.push(book);
     });
 
     frame.shelfYs.forEach((shelfY, shelfIndex) => {
       const row = rows[shelfIndex] ?? [];
       if (row.length === 0) return;
-      const usable = frame.width - 0.08;
+      // Real shelves: books stand together from the left, at slightly different heights,
+      // and a brass bookend holds them up when the shelf is not full.
+      const usable = frame.width - 0.04;
       const heightGoal = 0.34;
-      const thickness = Math.min(heightGoal * SPINE_ASPECT, (usable * 0.94) / row.length);
-      const height = thickness / SPINE_ASPECT;
-      const gap = (usable - thickness * row.length) / (row.length + 1);
+      const scales = row.map((book) => 0.9 + (hashString(book.id) % 1000) / 1000 * 0.16);
+      const gap = 0.0025;
+      const sum = scales.reduce((total, scale) => total + scale, 0);
+      const base = Math.min(heightGoal * SPINE_ASPECT, (usable - gap * (row.length - 1) - 0.03) / sum);
+      let along = 0.02;
       row.forEach((book, index) => {
+        const thickness = base * scales[index]!;
+        const height = thickness / SPINE_ASPECT;
         const rng = mulberry32(hashString(book.id));
         const depth = range(rng, 0.175, 0.21);
-        const along = 0.04 + gap * (index + 1) + thickness * index + thickness / 2;
-        const posed = pose(frame, along, shelfY + height / 2, depth);
+        const posed = pose(frame, along + thickness / 2, shelfY + height / 2, depth);
+        along += thickness + gap;
         const art = spineArt(book.title);
         placed.push({
           key: book.id,
@@ -144,10 +157,14 @@ export function placeCollection(books: Book[]): {
           lent: book.status === "lent",
         });
       });
+      if (frame.width - along > 0.03) {
+        const at = pose(frame, along + 0.006, shelfY + 0.06, 0.16);
+        bookends.push({ position: at.position, quaternion: at.quaternion });
+      }
     });
   }
 
-  return { placed, plaques, frames, room };
+  return { placed, plaques, frames, room, bookends };
 }
 
 export const FILLER_TEMPLATE_COUNT = 0;

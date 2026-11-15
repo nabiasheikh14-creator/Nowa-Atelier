@@ -1,6 +1,6 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { useMemo } from "react";
 import * as THREE from "three";
 import type { Book } from "@/lib/types";
@@ -25,7 +25,9 @@ export function LibraryScene({
   shelfLabel,
   activeShelf,
   onShelf,
+  day,
 }: {
+  day: boolean;
   litIds: Set<string> | null;
   peekId: string | null;
   shelfLabel: (genre: string) => string;
@@ -65,11 +67,24 @@ export function LibraryScene({
       }}
     >
       <color attach="background" args={["#12110f"]} />
-      <ambientLight intensity={0.55} color={"#f4e7d4"} />
-      <hemisphereLight args={["#6d7e92", "#3a2618", 0.72]} />
-      <directionalLight position={[-2.2, 3.4, 2.4]} intensity={1.15} color={"#d5e1f2"} />
-      <pointLight position={[0, 2.1, 0.4]} intensity={6} distance={9} decay={2} color={"#ffe1c2"} />
-      <Room room={layout.room} frames={layout.frames} />
+      <Exposure value={day ? 1.3 : 1.12} />
+      {day ? (
+        <>
+          {/* daylight: a bright sky fill, and the sun coming in low from the window on the left */}
+          <ambientLight intensity={0.8} color={"#fff4e4"} />
+          <hemisphereLight args={["#d6e6ff", "#6a4a30", 1.25]} />
+          <directionalLight position={[-4, 3.6, 2.2]} intensity={2.2} color={"#fff0d6"} />
+          <pointLight position={[0, 2.4, 0.4]} intensity={3} distance={9} decay={2} color={"#fff6ea"} />
+        </>
+      ) : (
+        <>
+          <ambientLight intensity={0.55} color={"#f4e7d4"} />
+          <hemisphereLight args={["#6d7e92", "#3a2618", 0.72]} />
+          <directionalLight position={[-2.2, 3.4, 2.4]} intensity={1.15} color={"#d5e1f2"} />
+          <pointLight position={[0, 2.1, 0.4]} intensity={6} distance={9} decay={2} color={"#ffe1c2"} />
+        </>
+      )}
+      <Room room={layout.room} frames={layout.frames} day={day} />
       <Books
         placed={layout.placed}
         plaques={layout.plaques}
@@ -80,8 +95,10 @@ export function LibraryScene({
         activeShelf={activeShelf}
         onOpen={onOpen}
         onShelf={onShelf}
+        day={day}
       />
-      <Dust count={48} bounds={dust} color={"#efe2cc"} size={0.018} />
+      <Bookends items={layout.bookends} />
+      <Dust count={day ? 70 : 48} bounds={dust} color={day ? "#fff4dc" : "#efe2cc"} size={day ? 0.022 : 0.018} />
       <CameraRig
         placed={layout.placed}
         focus={focus}
@@ -95,4 +112,32 @@ export function LibraryScene({
       />
     </Canvas>
   );
+}
+
+/** Brass bookends at the end of any shelf that isn't full: an upright plate on a foot. */
+function Bookends({ items }: { items: { position: [number, number, number]; quaternion: [number, number, number, number] }[] }) {
+  return (
+    <group raycast={() => null}>
+      {items.map((item, index) => (
+        <group key={index} position={item.position} quaternion={item.quaternion}>
+          <mesh>
+            <boxGeometry args={[0.008, 0.12, 0.11]} />
+            <meshStandardMaterial color={"#a8844e"} metalness={0.8} roughness={0.32} />
+          </mesh>
+          <mesh position={[-0.03, -0.058, 0]}>
+            <boxGeometry args={[0.06, 0.004, 0.11]} />
+            <meshStandardMaterial color={"#a8844e"} metalness={0.8} roughness={0.32} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/** Tone-mapping exposure follows the time of day. */
+function Exposure({ value }: { value: number }) {
+  useFrame((state) => {
+    if (state.gl.toneMappingExposure !== value) state.gl.toneMappingExposure = value;
+  });
+  return null;
 }
