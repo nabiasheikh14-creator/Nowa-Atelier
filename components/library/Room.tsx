@@ -73,6 +73,7 @@ export function Room({ room, frames }: { room: RoomPlan; frames: ShelfFrame[] })
         <planeGeometry args={[rugWidth, rugWidth * RUG_ASPECT]} />
         <meshStandardMaterial map={rug} color={"#b8a89c"} roughness={1} />
       </mesh>
+      <Desk room={room} />
       <Chair room={room} />
       <SideTable room={room} />
       <Globe room={room} map={globe} />
@@ -190,6 +191,156 @@ function Globe({ room, map }: { room: RoomPlan; map: THREE.CanvasTexture }) {
         <torusGeometry args={[0.175, 0.008, 6, 24]} />
         <meshStandardMaterial color={brass} metalness={0.75} roughness={0.3} />
       </mesh>
+    </group>
+  );
+}
+
+/** A writing desk in the back-left corner, beside the shelves: lamp, books, chai. */
+function Desk({ room }: { room: RoomPlan }) {
+  const x = -room.inner.x + 0.38;
+  const z = -room.inner.z + 0.3;
+  const top = 0.74;
+  const legs: [number, number][] = [
+    [-0.29, -0.2],
+    [0.29, -0.2],
+    [-0.29, 0.2],
+    [0.29, 0.2],
+  ];
+  const stack = [
+    { w: 0.2, d: 0.14, h: 0.032, color: "#6e2433", turn: 0.08 },
+    { w: 0.18, d: 0.13, h: 0.028, color: "#1e3d34", turn: -0.12 },
+    { w: 0.17, d: 0.12, h: 0.03, color: "#8a7044", turn: 0.2 },
+  ];
+  let stackY = top + 0.012;
+  return (
+    <group position={[x, 0, z]} rotation={[0, 0.18, 0]}>
+      {/* top, apron, drawer, and slightly tapered legs */}
+      <mesh position={[0, top - 0.012, 0]}>
+        <boxGeometry args={[0.66, 0.026, 0.48]} />
+        <meshStandardMaterial color={wood} roughness={0.42} metalness={0.04} />
+      </mesh>
+      <mesh position={[0, top - 0.06, 0]}>
+        <boxGeometry args={[0.6, 0.07, 0.42]} />
+        <meshStandardMaterial color={woodDark} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, top - 0.06, 0.212]}>
+        <boxGeometry args={[0.24, 0.045, 0.006]} />
+        <meshStandardMaterial color={wood} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, top - 0.06, 0.218]}>
+        <sphereGeometry args={[0.008, 8, 8]} />
+        <meshStandardMaterial color={brass} metalness={0.8} roughness={0.3} />
+      </mesh>
+      {legs.map(([lx, lz], index) => (
+        <mesh key={index} position={[lx, (top - 0.09) / 2, lz]}>
+          <cylinderGeometry args={[0.018, 0.012, top - 0.09, 8]} />
+          <meshStandardMaterial color={woodDark} roughness={0.55} />
+        </mesh>
+      ))}
+
+      {/* banker's lamp: brass stem, green glass shade, warm pool of light */}
+      <group position={[-0.17, top, -0.1]}>
+        <mesh position={[0, 0.012, 0]}>
+          <cylinderGeometry args={[0.06, 0.07, 0.024, 20]} />
+          <meshStandardMaterial color={brass} metalness={0.85} roughness={0.28} />
+        </mesh>
+        <mesh position={[0, 0.13, 0]}>
+          <cylinderGeometry args={[0.008, 0.008, 0.22, 8]} />
+          <meshStandardMaterial color={brass} metalness={0.85} roughness={0.28} />
+        </mesh>
+        {/* the shade lies on its side, a green half-tube over the bulb */}
+        <mesh position={[0, 0.25, 0.03]} rotation={[0, 0, Math.PI / 2]} scale={[1, 1, 0.8]}>
+          <cylinderGeometry args={[0.05, 0.05, 0.2, 20, 1, true, Math.PI / 2, Math.PI]} />
+          <meshStandardMaterial color={"#1f5a3c"} emissive={"#1f6a45"} emissiveIntensity={0.28} roughness={0.25} side={THREE.DoubleSide} />
+        </mesh>
+        <mesh position={[0, 0.238, 0.03]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.012, 0.012, 0.15, 8]} />
+          <meshStandardMaterial color={"#fff1d6"} emissive={"#ffd08a"} emissiveIntensity={3} />
+        </mesh>
+        <pointLight position={[0, 0.18, 0.06]} color={"#ffc27a"} intensity={3.2} distance={2.6} decay={2} />
+      </group>
+
+      {/* a small stack of books, squared up badly */}
+      <group position={[0.17, 0, -0.11]}>
+        {stack.map((book, index) => {
+          const y = stackY + book.h / 2;
+          stackY += book.h;
+          return (
+            <mesh key={index} position={[0, y, 0]} rotation={[0, book.turn, 0]}>
+              <boxGeometry args={[book.w, book.h, book.d]} />
+              <meshStandardMaterial color={book.color} roughness={0.8} />
+            </mesh>
+          );
+        })}
+      </group>
+
+      {/* an open book, mid-read */}
+      <group position={[0.02, top + 0.006, 0.09]} rotation={[0, -0.25, 0]}>
+        <mesh position={[-0.062, 0.006, 0]} rotation={[0, 0, 0.12]}>
+          <boxGeometry args={[0.12, 0.008, 0.17]} />
+          <meshStandardMaterial color={"#efe3c8"} roughness={0.9} />
+        </mesh>
+        <mesh position={[0.062, 0.006, 0]} rotation={[0, 0, -0.12]}>
+          <boxGeometry args={[0.12, 0.008, 0.17]} />
+          <meshStandardMaterial color={"#efe3c8"} roughness={0.9} />
+        </mesh>
+        <mesh position={[0, -0.001, 0]}>
+          <boxGeometry args={[0.25, 0.004, 0.18]} />
+          <meshStandardMaterial color={"#3e2a22"} roughness={0.7} />
+        </mesh>
+      </group>
+
+      {/* chai, on a saucer */}
+      <group position={[0.22, top, 0.12]}>
+        <mesh position={[0, 0.004, 0]}>
+          <cylinderGeometry args={[0.052, 0.045, 0.008, 24]} />
+          <meshStandardMaterial color={"#ece2cf"} roughness={0.35} />
+        </mesh>
+        <mesh position={[0, 0.034, 0]}>
+          <cylinderGeometry args={[0.032, 0.024, 0.052, 20]} />
+          <meshStandardMaterial color={"#ece2cf"} roughness={0.35} />
+        </mesh>
+        <mesh position={[0, 0.058, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.029, 20]} />
+          <meshStandardMaterial color={"#9a6a3c"} roughness={0.2} />
+        </mesh>
+        <mesh position={[0.037, 0.036, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <torusGeometry args={[0.012, 0.003, 6, 12]} />
+          <meshStandardMaterial color={"#ece2cf"} roughness={0.35} />
+        </mesh>
+      </group>
+
+      {/* a small plant in a clay pot */}
+      <group position={[-0.25, top, 0.13]}>
+        <mesh position={[0, 0.03, 0]}>
+          <cylinderGeometry args={[0.034, 0.026, 0.06, 14]} />
+          <meshStandardMaterial color={"#8a4b2e"} roughness={0.85} />
+        </mesh>
+        {[0, 1.3, 2.5, 3.8, 5.1].map((turn, index) => (
+          <mesh key={index} position={[Math.cos(turn) * 0.018, 0.085 + (index % 2) * 0.012, Math.sin(turn) * 0.018]} rotation={[Math.cos(turn) * 0.5, turn, Math.sin(turn) * 0.5]} scale={[1, 1.6, 0.35]}>
+            <sphereGeometry args={[0.022, 8, 6]} />
+            <meshStandardMaterial color={"#2f5a33"} roughness={0.7} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* a chair, turned out to the side as if someone just got up */}
+      <group position={[0.3, 0, 0.42]} rotation={[0, Math.PI - 1.05, 0]}>
+        <mesh position={[0, 0.44, 0]}>
+          <boxGeometry args={[0.4, 0.04, 0.38]} />
+          <meshStandardMaterial color={velvet} roughness={0.85} />
+        </mesh>
+        <mesh position={[0, 0.64, 0.17]}>
+          <boxGeometry args={[0.38, 0.36, 0.035]} />
+          <meshStandardMaterial color={wood} roughness={0.5} />
+        </mesh>
+        {legs.map(([lx, lz], index) => (
+          <mesh key={index} position={[lx * 0.6, 0.21, lz * 0.85]}>
+            <cylinderGeometry args={[0.014, 0.011, 0.42, 6]} />
+            <meshStandardMaterial color={woodDark} roughness={0.55} />
+          </mesh>
+        ))}
+      </group>
     </group>
   );
 }
