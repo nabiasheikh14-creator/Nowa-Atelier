@@ -26,7 +26,8 @@ function clean(input: string): string {
 
 async function getJson(url: string): Promise<unknown | null> {
   const response = await fetch(url, {
-    headers: { accept: "application/json", "user-agent": "TheLibrary/1.0 (private collection)" },
+    headers: { accept: "application/json", "user-agent": "TheLibrary/1.0 (reading rooms)" },
+    signal: AbortSignal.timeout(7000),
     next: { revalidate: 0 },
   });
   if (!response.ok) return null;
@@ -101,4 +102,74 @@ export async function lookupIsbn(raw: string): Promise<LookupResult | null> {
     : `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
 
   return { title, author, cover_url, synopsis, isbn };
+}
+
+export type SearchHit = {
+  workKey: string | null;
+  title: string;
+  author: string;
+  year: number | null;
+  coverId: number | null;
+  isbn: string | null;
+  subjects: string[];
+};
+
+type SearchDoc = {
+  key?: string;
+  title?: string;
+  author_name?: string[];
+  first_publish_year?: number;
+  cover_i?: number;
+  isbn?: string[];
+  subject?: string[];
+};
+
+const FIELDS = "key,title,author_name,first_publish_year,cover_i,isbn,subject";
+
+function toHit(doc: SearchDoc): SearchHit | null {
+  if (!doc.title) return null;
+  const isbn = doc.isbn?.find((value) => value.length === 13) ?? doc.isbn?.[0] ?? null;
+  return {
+    workKey: doc.key ?? null,
+    title: doc.title.trim(),
+    author: doc.author_name?.slice(0, 2).join(" and ") || "Unknown",
+    year: doc.first_publish_year ?? null,
+    coverId: doc.cover_i ?? null,
+    isbn,
+    subjects: (doc.subject ?? []).slice(0, 25),
+  };
+}
+
+/** Title, author, or ISBN search against Open Library. */
+export async function searchBooks(query: string, limit = 8): Promise<SearchHit[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  const digits = normalizeIsbn(trimmed);
+  const q = digits.length === 10 || digits.length === 13 ? `isbn:${digits}` : trimmed;
+  const data = (await getJson(
+    `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=${limit}&fields=${FIELDS}`,
+  )) as { docs?: SearchDoc[] } | null;
+  return (data?.docs ?? []).map(toHit).filter((hit): hit is SearchHit => hit !== null);
+}
+
+/** Best single match for a book we only know by title, author, and maybe ISBN (e.g. a Goodreads row). */
+export async function findBook(input: { title: string; author: string; isbn?: string | null }): Promise<SearchHit | null> {
+  const isbn = input.isbn ? normalizeIsbn(input.isbn) : "";
+  if (isbn.length === 10 || isbn.length === 13) {
+    const [hit] = await searchBooks(isbn, 1);
+    if (hit) return hit;
+  }
+  const title = input.title.replace(/\s*\(.*?\)\s*$/, "").trim(); // Goodreads adds "(Series, #2)"
+  const data = (await getJson(
+    `https://openlibrary.org/search.json?title=${encodeURIComponent(title)}&author=${encodeURIComponent(input.author)}&limit=1&fields=${FIELDS}`,
+  )) as { docs?: SearchDoc[] } | null;
+  const doc = data?.docs?.[0];
+  return doc ? toHit(doc) : null;
+}
+
+/** A work's description, for the synopsis. */
+export async function workDescription(workKey: string | null): Promise<string | null> {
+  if (!workKey) return null;
+  const work = (await getJson(`https://openlibrary.org${workKey}.json`)) as { description?: unknown } | null;
+  return asText(work?.description);
 }

@@ -3,8 +3,8 @@ type Bucket = { hits: number[] };
 const buckets = new Map<string, Bucket>();
 
 /**
- * In-memory limiter for a single server process. Phase 1 assumes one keeper
- * and one Node server. A multi-instance deploy should move this next to the data.
+ * In-memory limiter, per server instance. On serverless hosting each instance keeps its
+ * own count, so this slows guessing rather than stopping it outright.
  */
 export function rateLimit(
   key: string,
@@ -24,6 +24,9 @@ export function rateLimit(
   return { ok: true };
 }
 
-export function clientKey(_request: Request, bucket: string): string {
-  return bucket;
+/** Per visitor: the first address in x-forwarded-for (set by Vercel), else one shared bucket. */
+export function clientKey(request: Request, bucket: string): string {
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const ip = forwarded || request.headers.get("x-real-ip") || "local";
+  return `${bucket}:${ip}`;
 }

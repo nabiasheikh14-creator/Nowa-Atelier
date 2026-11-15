@@ -1,7 +1,9 @@
-import { emailOwner } from "@/lib/mail";
+import { sendEmail } from "@/lib/mail";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
-import { createBorrowRequest, getBook } from "@/lib/store";
+import { createBorrowRequest, getBook, ownerAddress } from "@/lib/store";
 import { parseBorrow } from "@/lib/validate";
+import { hasDatabase } from "@/lib/db";
+import { roomById } from "@/lib/rooms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +24,10 @@ export async function POST(request: Request) {
 
   const bookId = typeof body?.bookId === "string" ? body.bookId : "";
   const target = await getBook(bookId);
-  if (!target) return Response.json({ error: "That book is not on the shelves." }, { status: 404 });
+  const room = target && hasDatabase() ? await roomById(target.owner_id) : null;
+  if (!target || (room && room.visibility === "private")) {
+    return Response.json({ error: "That book is not on the shelves." }, { status: 404 });
+  }
   if (target.format !== "physical") {
     return Response.json({ error: "This one is not a copy that leaves the room." }, { status: 400 });
   }
@@ -37,7 +42,8 @@ export async function POST(request: Request) {
     message: parsed.message,
   });
 
-  await emailOwner(
+  await sendEmail(
+    await ownerAddress(target.owner_id),
     `A request for ${target.title}`,
     [
       `${parsed.name} (${parsed.contact}) would like to borrow "${target.title}" by ${target.author}.`,

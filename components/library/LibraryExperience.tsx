@@ -17,6 +17,8 @@ import { BookPopup } from "./BookPopup";
 import { ShelfBrowser } from "./ShelfBrowser";
 import { initialPlace, usePlace } from "./use-place";
 import type { Place } from "@/lib/links";
+import type { RoomContext } from "@/lib/room-page";
+import { EmptyRoom, RoomDialogs, RoomMenu, call, type DialogName } from "@/components/rooms/RoomTools";
 import { hoverTip } from "./input-state";
 import type { FocusRequest } from "./CameraRig";
 
@@ -75,8 +77,14 @@ function focusFor(place: Place, books: Book[]): FocusRequest {
   return null;
 }
 
-export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
-  const [books] = useState(initialBooks);
+export function LibraryExperience({ initialBooks, context }: { initialBooks: Book[]; context: RoomContext }) {
+  const [books, setBooks] = useState(initialBooks);
+  const [dialog, setDialog] = useState<DialogName>(null);
+  // The 3D shelves only need rebuilding when what stands on them changes, not when a rating does.
+  const shelfSignature = books.map((book) => `${book.id}|${book.genre}|${book.title}|${book.status}`).join(";");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const standing = useMemo(() => books, [shelfSignature]);
+  const reading = useMemo(() => books.filter((book) => book.reading_status === "reading"), [books]);
   const mode = useSyncExternalStore(subscribeMode, readMode, () => "checking" as Mode);
   const [focus, setFocus] = useState<FocusRequest>(() => focusFor(initialPlace(books), books));
   const [popup, setPopup] = useState(false);
@@ -201,6 +209,41 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
     setFocus(null);
   }
 
+  // ——— owner changes ———
+  const owner = context.isOwner
+    ? {
+        onSaved: (updated: Book) => {
+          setBooks((current) =>
+            updated.reading_status === "to-read"
+              ? current.filter((book) => book.id !== updated.id)
+              : current.map((book) => (book.id === updated.id ? updated : book)),
+          );
+          if (updated.reading_status === "to-read") closeBook();
+        },
+        onRemoved: (id: string) => {
+          setBooks((current) => current.filter((book) => book.id !== id));
+          closeBook();
+        },
+      }
+    : undefined;
+
+  function bookAdded(book: Book) {
+    if (book.reading_status !== "to-read") setBooks((current) => [...current, book]);
+  }
+
+  async function reloadBooks() {
+    try {
+      const data = await call<{ books: Book[] }>(`/api/rooms/${context.room.handle}/books`);
+      setBooks(data.books);
+    } catch {
+      window.location.reload();
+    }
+  }
+
+  const dialogs = (
+    <RoomDialogs dialog={dialog} context={context} onClose={() => setDialog(null)} onAdded={bookAdded} onReload={() => void reloadBooks()} />
+  );
+
   const showRoom = useCallback(() => {
     setPopup(false);
     setQuery("");
@@ -274,11 +317,30 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
       </main>
     );
   }
-  if (mode === "small" || mode === "webgl") {
-    return <ShelfBrowser books={books} place={place} go={go} variant={mode === "small" ? "phone" : "webgl"} />;
+  if (books.length === 0) {
+    return (
+      <>
+        <EmptyRoom context={context} onDialog={setDialog} />
+        {dialogs}
+      </>
+    );
   }
-  if (place.view === "list") {
-    return <ShelfBrowser books={books} place={place} go={go} variant="list" onRoom={() => go({ view: "room", bookId: null })} />;
+  if (mode === "small" || mode === "webgl" || place.view === "list") {
+    return (
+      <>
+        <ShelfBrowser
+          books={books}
+          place={place}
+          go={go}
+          variant={place.view === "list" && mode === "room" ? "list" : mode === "webgl" ? "webgl" : mode === "small" ? "phone" : "list"}
+          onRoom={mode === "room" ? () => go({ view: "room", bookId: null }) : undefined}
+          context={context}
+          owner={owner}
+          onDialog={setDialog}
+        />
+        {dialogs}
+      </>
+    );
   }
 
   const shelf = filter?.kind === "shelf" ? shelfInfo(filter.shelf) : null;
@@ -293,7 +355,7 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
     <main className={`stage ${popup ? "book-open" : ""} ${day ? "day" : "night"}`}>
       <div className={`light-fade ${dimming ? "on" : ""}`} aria-hidden="true" />
       <LibraryScene
-        books={books}
+        books={standing}
         focus={focus}
         popup={popup}
         reducedMotion={reducedMotion}
@@ -423,7 +485,7 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
             })}
           </div>
 
-          <div className={`subrail ${moreChips ? "open" : ""}`}>
+          {(shelf || chips.length > 0) && <div className={`subrail ${moreChips ? "open" : ""}`}>
             <p className="context" title={shelf ? `${shelf.name}. ${shelf.blurb}` : undefined}>
               {shelf ? (
                 <span>
@@ -462,7 +524,7 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
                 )}
               </div>
             )}
-          </div>
+          </div>}
         </nav>
       </header>
       {!introDone && (
@@ -516,7 +578,14 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
           setAudioNote("Room tone isn't available right now.");
         }}
       />
-      {openBook && <BookPopup book={openBook} onClose={closeBook} onFilter={applyFromBook} />}
+      <RoomMenu
+        context={context}
+        reading={reading}
+        onOpenBook={(id) => openFromShelf(id)}
+        onDialog={setDialog}
+      />
+      {dialogs}
+      {openBook && <BookPopup book={openBook} onClose={closeBook} onFilter={applyFromBook} owner={owner} />}
     </main>
   );
 }

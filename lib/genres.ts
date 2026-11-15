@@ -22,6 +22,11 @@ export const SHELVES: ShelfInfo[] = [
   { id: "Memoir", label: "Memoir", name: "Memoir, biography & autobiographical writing", blurb: "Memoir · Biography · Diaries · Personal narratives" },
   { id: "Mind", label: "Psychology", name: "Psychology, philosophy, feminism & self-development", blurb: "Popular psychology · Self-help · Feminist theory · Creativity · Social criticism" },
   { id: "Reference", label: "Reference", name: "Reference, academic & miscellaneous", blurb: "Dictionaries · Anthologies · Publications" },
+  // General shelves for other people's libraries. They only appear when a room has books on them.
+  { id: "History", label: "History & Politics", name: "History, politics & current affairs", blurb: "History · Politics · Society · Economics" },
+  { id: "Science", label: "Science & Ideas", name: "Science, nature & ideas", blurb: "Science · Nature · Technology · Mathematics" },
+  { id: "Art", label: "Art & Design", name: "Art, design & making", blurb: "Art · Design · Architecture · Photography · Music" },
+  { id: "Other", label: "Other", name: "Everything else", blurb: "Books still finding their shelf" },
 ];
 
 const SHELF_BY_ID = new Map(SHELVES.map((shelf) => [shelf.id, shelf]));
@@ -98,11 +103,13 @@ export type BookProfile = {
 
 const cache = new Map<string, BookProfile>();
 
-export function profileOf(book: Pick<Book, "title" | "genre">): BookProfile {
-  const key = `${book.title}\n${book.genre}`;
+export function profileOf(book: Pick<Book, "title" | "genre" | "shelves" | "subgenres">): BookProfile {
+  const stored = (book.shelves?.length ?? 0) > 0 || (book.subgenres?.length ?? 0) > 0;
+  const key = `${book.title}\n${book.genre}\n${stored ? `${book.shelves?.join("|")}\n${book.subgenres?.join("|")}` : ""}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const entry = INDEX[book.title];
+  // Stored lists win (any room); otherwise fall back to the founding room's own reading list.
+  const entry = stored ? { shelves: book.shelves ?? [], subgenres: book.subgenres ?? [] } : INDEX[book.title];
   const shelves = [book.genre, ...(entry?.shelves ?? []).filter((shelf) => shelf !== book.genre)];
   const subgenres = entry?.subgenres ?? [];
   const words = subgenres.join(" · ").toLowerCase();

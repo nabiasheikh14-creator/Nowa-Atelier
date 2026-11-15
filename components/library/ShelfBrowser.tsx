@@ -8,6 +8,9 @@ import type { Place } from "@/lib/links";
 import { spineArt, spineAuthor, spineTitle } from "@/lib/spine-design";
 import { hashString } from "@/lib/random";
 import { BookPopup } from "./BookPopup";
+import Link from "next/link";
+import type { RoomContext } from "@/lib/room-page";
+import type { DialogName } from "@/components/rooms/RoomTools";
 
 type Variant = "phone" | "list" | "webgl";
 
@@ -21,12 +24,18 @@ export function ShelfBrowser({
   go,
   variant,
   onRoom,
+  context,
+  owner,
+  onDialog,
 }: {
   books: Book[];
   place: Place;
   go: (patch: Partial<Place>, how?: "push" | "replace") => void;
   variant: Variant;
   onRoom?: () => void;
+  context: RoomContext;
+  owner?: { onSaved: (book: Book) => void; onRemoved: (id: string) => void };
+  onDialog: (name: DialogName) => void;
 }) {
   const [query, setQuery] = useState("");
   const [moreChips, setMoreChips] = useState(false);
@@ -83,14 +92,41 @@ export function ShelfBrowser({
     <main className={`shelves-view ${variant}`}>
       <header className="sv-head">
         <div className="sv-brand">
-          <p className="kicker">A private collection</p>
-          <h1>The Library</h1>
+          <p className="kicker">{context.isOwner ? "Your room" : "The Library"}</p>
+          <h1>{context.room.display_name}&apos;s library</h1>
+          {context.room.bio && <p className="sv-bio">{context.room.bio}</p>}
         </div>
-        {variant === "list" && onRoom && (
-          <button type="button" className="sv-room" onClick={onRoom}>
-            Back to the room
-          </button>
-        )}
+        <div className="sv-actions">
+          {onRoom && (
+            <button type="button" className="sv-room" onClick={onRoom}>
+              Back to the room
+            </button>
+          )}
+          {context.isOwner ? (
+            <>
+              <button type="button" className="sv-room" onClick={() => onDialog("add")}>
+                Add a book
+              </button>
+              <button type="button" className="sv-room" onClick={() => onDialog("import")}>
+                Import
+              </button>
+              <button type="button" className="sv-room" onClick={() => onDialog("settings")}>
+                Settings
+              </button>
+            </>
+          ) : (
+            <>
+              <Link className="sv-room" href="/rooms">
+                Other rooms
+              </Link>
+              {context.roomsOpen && (
+                <Link className="sv-room" href={context.viewerHandle ? `/@${context.viewerHandle}` : "/join"}>
+                  {context.viewerHandle ? "Your room" : "Make your own room"}
+                </Link>
+              )}
+            </>
+          )}
+        </div>
         <label className="sv-search">
           <span className="sr-only">Search the shelves</span>
           <input
@@ -217,6 +253,15 @@ export function ShelfBrowser({
       {openBook && (
         <BookPopup
           book={openBook}
+          owner={
+            owner && {
+              onSaved: owner.onSaved,
+              onRemoved: (id) => {
+                owner.onRemoved(id);
+                go({ bookId: null });
+              },
+            }
+          }
           onClose={() => go({ bookId: null })}
           onFilter={(next) => {
             go({ filter: next, bookId: null });

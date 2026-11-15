@@ -1,8 +1,8 @@
 import { Resend } from "resend";
 
-export async function emailOwner(subject: string, text: string): Promise<boolean> {
+/** Sends a plain email through Resend, if it is configured. Returns false when it isn't. */
+export async function sendEmail(to: string | null, subject: string, text: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
-  const to = process.env.OWNER_EMAIL;
   if (!apiKey || !to) return false;
   const from = process.env.RESEND_FROM || "The Library <onboarding@resend.dev>";
   const resend = new Resend(apiKey);
