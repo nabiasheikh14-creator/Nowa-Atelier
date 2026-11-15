@@ -32,7 +32,7 @@ const books: Draft[] = [
   { title: "University publication magazine", author: "University publication", genre: "Reference", synopsis: "A student magazine from a university press run. Kept with the other things that are not quite books and not quite papers." },
 ];
 
-export const SEED_REVISION = 4;
+export const SEED_REVISION = 5;
 
 function toBook(draft: Draft, index: number): Book {
   const copy = (copyCount.get(draft.title) ?? 0) + 1;

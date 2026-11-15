@@ -1,14 +1,15 @@
+// The order of the owner's reading list, left to right along the wall.
 export const GENRE_ORDER = [
   "Fantasy",
   "Speculative",
   "Romance",
+  "Mystery",
   "Literary",
   "Classics",
   "South Asian",
   "Poetry",
-  "Mystery",
-  "Memoir",
   "East Asian",
+  "Memoir",
   "Mind",
   "Reference",
 ] as const;
@@ -17,7 +18,7 @@ export const SHELF_YS = [0.24, 0.76, 1.28];
 const CASE_DEPTH = 0.26;
 const SLOT = 0.05;
 const BAY_PAD = 0.07;
-const MIN_BAY = 0.2;
+const MIN_BAY = 0.16;
 const POST = 0.038;
 const SIDE = 0.82;
 

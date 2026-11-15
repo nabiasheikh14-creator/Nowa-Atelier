@@ -7,10 +7,17 @@ export async function GET(request: Request) {
     return new Response("Unknown cover.", { status: 400 });
   }
 
-  const upstream = await fetch(`https://covers.openlibrary.org/b/id/${id}-L.jpg`, {
-    redirect: "follow",
-    headers: { "user-agent": "TheLibrary/1.0 (private collection)" },
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(`https://covers.openlibrary.org/b/id/${id}-L.jpg`, {
+      redirect: "follow",
+      headers: { "user-agent": "TheLibrary/1.0 (private collection)" },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    // Open Library is down or slow. The open book falls back to a cloth cover.
+    return new Response("Cover unavailable.", { status: 404 });
+  }
   if (!upstream.ok) return new Response("Cover missing.", { status: 404 });
   const type = upstream.headers.get("content-type") || "";
   if (!type.startsWith("image/")) return new Response("Cover missing.", { status: 404 });

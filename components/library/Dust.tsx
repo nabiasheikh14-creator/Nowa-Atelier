@@ -30,6 +30,19 @@ export function Dust({
   }, [bounds.max, bounds.min, count]);
 
   const points = useRef<THREE.Points>(null);
+  // Without a sprite, points draw as hard squares. A soft disc reads as dust in lamplight.
+  const sprite = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext("2d")!;
+    const glow = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    glow.addColorStop(0, "rgba(255,255,255,1)");
+    glow.addColorStop(0.35, "rgba(255,255,255,0.55)");
+    glow.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(canvas);
+  }, []);
 
   useFrame((_, delta) => {
     const attribute = geometry.getAttribute("position") as THREE.BufferAttribute;
@@ -50,6 +63,8 @@ export function Dust({
     <points ref={points} geometry={geometry} raycast={() => null}>
       <pointsMaterial
         color={color}
+        map={sprite}
+        alphaTest={0.01}
         size={size}
         transparent
         opacity={0.45}

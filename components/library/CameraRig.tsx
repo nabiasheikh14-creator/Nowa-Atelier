@@ -7,7 +7,10 @@ import type { PlacedBook } from "@/lib/placement";
 import { clampCamera, type RoomPlan } from "@/lib/room-plan";
 import { pointerGate } from "./input-state";
 
-export type FocusRequest = { id: string; intent: "highlight" | "open" | "home" | "section" } | null;
+export type FocusRequest =
+  | { id: string; intent: "highlight" | "open" | "home" | "section" }
+  | { id: string; intent: "frame"; ids: string[] }
+  | null;
 
 type Pose = { x: number; y: number; z: number; yaw: number; pitch: number };
 
@@ -25,16 +28,30 @@ function poseLookingAt(x: number, y: number, z: number, book: PlacedBook): Pose 
 }
 
 function sectionPose(genre: string, placed: PlacedBook[], room: RoomPlan): Pose {
-  const books = placed.filter((book) => book.genre === genre);
+  return framePose(
+    placed.filter((book) => book.genre === genre),
+    room,
+  );
+}
+
+/** Stand where every given book is in view, or go home if they span the whole wall. */
+function framePose(books: PlacedBook[], room: RoomPlan): Pose {
   if (books.length === 0) return { ...room.home };
   const xs = books.map((book) => book.position[0]);
   const center = (Math.min(...xs) + Math.max(...xs)) / 2;
   const span = Math.max(0.42, Math.max(...xs) - Math.min(...xs) + 0.16);
   const halfHorizontal = Math.atan(Math.tan((30 * Math.PI) / 180) * 1.4);
-  const dist = span / 2 / Math.tan(halfHorizontal) + 0.38;
+  // Fit all three shelves top to bottom, not only the eye-level row. Vertical fov is 60°.
+  const bottom = Math.min(...books.map((book) => book.position[1] - book.size[1] / 2)) - 0.04;
+  const top = Math.max(...books.map((book) => book.position[1] + book.size[1] / 2)) + 0.06;
+  const tall = Math.max(1.3, top - bottom);
+  const across = span / 2 / Math.tan(halfHorizontal) + 0.38;
+  // The header covers roughly the top seventh of the window, so leave room above the top shelf.
+  const upright = (tall * 1.16) / 2 / Math.tan((30 * Math.PI) / 180) + 0.05;
+  const dist = Math.max(across, upright);
   const front = books[0]!.position[2] + books[0]!.size[2] / 2;
   const spot = clampCamera(center, front + dist, room);
-  return { x: spot.x, y: room.home.y, z: spot.z, yaw: 0, pitch: -0.02 };
+  return { x: spot.x, y: (top + bottom) / 2 + 0.1, z: spot.z, yaw: 0, pitch: -0.02 };
 }
 
 function viewpoint(book: PlacedBook, room: RoomPlan): Pose {
@@ -233,6 +250,17 @@ export function CameraRig({
         fly.current = { from: { ...pose.current }, to: sectionPose(focus.id, placed, plan), t: 0, open: false };
         returnPose.current = null;
         mode.current = "fly";
+      } else if (focus?.intent === "frame") {
+        const wanted = new Set(focus.ids);
+        const target = framePose(
+          placed.filter((book) => book.bookId && wanted.has(book.bookId)),
+          plan,
+        );
+        // Never step closer than home when the matches are spread along the wall.
+        const to = target.z > plan.home.z ? { ...plan.home } : target;
+        fly.current = { from: { ...pose.current }, to, t: 0, open: false };
+        returnPose.current = null;
+        mode.current = "fly";
       } else if (focus) {
         const book = placed.find((item) => item.bookId === focus.id);
         const sameBook = Boolean(previous?.startsWith(`${focus.id}:`) && fly.current);
@@ -264,7 +292,7 @@ export function CameraRig({
     }
 
     if (mode.current === "fly" && fly.current) {
-      fly.current.t = Math.min(1, fly.current.t + delta / 0.85);
+      fly.current.t = Math.min(1, fly.current.t + delta / (reducedMotion ? 0.01 : 0.85));
       const t = fly.current.t * fly.current.t * (3 - 2 * fly.current.t);
       const from = fly.current.from;
       const to = fly.current.to;

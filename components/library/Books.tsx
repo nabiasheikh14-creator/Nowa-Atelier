@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
-import { Text } from "@react-three/drei";
+import { Html, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { type Plaque, type PlacedBook } from "@/lib/placement";
 import { SPINE_ASPECT, spineArt, spineAuthor, spineTitle, type SpineArt, type SpineMark } from "@/lib/spine-design";
@@ -24,7 +24,6 @@ const closestPoint = new THREE.Vector3();
 
 const spineVertex = /* glsl */ `
 attribute vec2 aAtlas;
-attribute float aShade;
 varying vec2 vUv;
 varying vec3 vNormalW;
 varying float vShade;
@@ -33,7 +32,11 @@ varying vec2 vAtlas;
 void main() {
   vUv = uv;
   vAtlas = aAtlas;
-  vShade = aShade;
+  #ifdef USE_INSTANCING_COLOR
+  vShade = instanceColor.r;
+  #else
+  vShade = 1.0;
+  #endif
   mat4 im = instanceMatrix;
   mat3 m = mat3(im);
   float sx = max(length(m[0]), 0.0001);
@@ -343,21 +346,39 @@ function makeSpineMaterial(atlas: Atlas): THREE.ShaderMaterial {
   });
 }
 
+export type SectionLabel = { label: string; count: number; state: "idle" | "active" | "muted" };
+
 export function Books({
   placed,
   plaques,
   focusId,
+  litIds,
+  peekId,
+  sections,
   onOpen,
+  onShelf,
 }: {
   placed: PlacedBook[];
   plaques: Plaque[];
   focusId: string | null;
+  /** When set, only these spines stay lit; the rest of the wall dims. */
+  litIds: Set<string> | null;
+  /** A spine to nudge forward, e.g. while its row is hovered in the results list. */
+  peekId: string | null;
+  sections: Record<string, SectionLabel>;
   onOpen: (id: string) => void;
+  onShelf: (genre: string) => void;
 }) {
+  const [far, setFar] = useState(true);
+  const farRef = useRef(true);
+  const litRef = useRef(litIds);
+  const peekRef = useRef(peekId);
   const [atlas, setAtlas] = useState<Atlas | null>(null);
   const mesh = useRef<THREE.InstancedMesh>(null);
   const ribbons = useRef<THREE.InstancedMesh>(null);
   const pull = useRef<Float32Array>(new Float32Array(placed.length));
+  const shadeNow = useRef<Float32Array>(new Float32Array(placed.length));
+  const tint = useMemo(() => new THREE.Color(), []);
   const hoverIndex = useRef<number | null>(null);
   const pressed = useRef<number | null>(null);
   const lastHover = useRef<{ index: number; x: number; y: number } | null>(null);
@@ -370,7 +391,9 @@ export function Books({
     focusRef.current = focusId;
     onOpenRef.current = onOpen;
     placedRef.current = placed;
-  }, [focusId, onOpen, placed]);
+    litRef.current = litIds;
+    peekRef.current = peekId;
+  }, [focusId, onOpen, placed, litIds, peekId]);
 
   const raycast = useCallback((raycaster: THREE.Raycaster, intersects: THREE.Intersection[]) => {
     const current = mesh.current;
@@ -436,17 +459,14 @@ export function Books({
     if (!atlas) return null;
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const uv = new Float32Array(placed.length * 2);
-    const shade = new Float32Array(placed.length);
     placed.forEach((book, index) => {
       const cell = atlas.indexes[index] ?? 0;
       const col = cell % atlas.cols;
       const row = Math.floor(cell / atlas.cols);
       uv[index * 2] = col / atlas.cols;
       uv[index * 2 + 1] = 1 - (row + 1) / atlas.rows;
-      shade[index] = book.shade;
     });
     geometry.setAttribute("aAtlas", new THREE.InstancedBufferAttribute(uv, 2));
-    geometry.setAttribute("aShade", new THREE.InstancedBufferAttribute(shade, 1));
     const page = new THREE.MeshStandardMaterial({ color: "#efe6d4", roughness: 0.92 });
     const board = new THREE.MeshStandardMaterial({ color: "#2a1c14", roughness: 0.8 });
     const materials = [board, board, page, board, makeSpineMaterial(atlas), page];
@@ -462,10 +482,14 @@ export function Books({
       dummy.scale.set(book.size[0], book.size[1], book.size[2]);
       dummy.updateMatrix();
       current.setMatrixAt(index, dummy.matrix);
+      // Per-book brightness rides on the instance colour: it tints every face, spine included.
+      shadeNow.current[index] = book.shade;
+      current.setColorAt(index, tint.setScalar(book.shade));
     });
     current.instanceMatrix.needsUpdate = true;
+    if (current.instanceColor) current.instanceColor.needsUpdate = true;
     current.computeBoundingSphere();
-  }, [built, dummy, placed]);
+  }, [built, dummy, placed, tint]);
 
   const lent = useMemo(
     () => placed.flatMap((book, index) => (book.lent && book.bookId ? [{ book, index }] : [])),
@@ -494,18 +518,43 @@ export function Books({
     if (lent.length) current.instanceMatrix.needsUpdate = true;
   }, [dummy, lent]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
+    const wallZ = plaques[0]?.position[2] ?? 0;
+    const isFar = state.camera.position.z - wallZ > 1.45;
+    if (isFar !== farRef.current) {
+      farRef.current = isFar;
+      setFar(isFar);
+    }
     const current = mesh.current;
     if (!current) return;
     const hover = hoverIndex.current;
     const focus = focusRef.current;
+    const lit = litRef.current;
+    const peek = peekRef.current;
+    if (current.instanceColor) {
+      let shadeDirty = false;
+      for (let index = 0; index < placed.length; index++) {
+        const book = placed[index]!;
+        const on = !lit || (book.bookId !== null && lit.has(book.bookId));
+        const goal = on ? book.shade : book.shade * 0.22;
+        const now = shadeNow.current[index] ?? book.shade;
+        if (Math.abs(now - goal) < 0.002) continue;
+        const next = THREE.MathUtils.damp(now, goal, 10, delta);
+        shadeNow.current[index] = next;
+        current.setColorAt(index, tint.setScalar(next));
+        shadeDirty = true;
+      }
+      if (shadeDirty) current.instanceColor.needsUpdate = true;
+    }
     const offset = new THREE.Vector3();
     const quaternion = new THREE.Quaternion();
     let dirty = false;
     let ribbonsDirty = false;
     for (let index = 0; index < placed.length; index++) {
       const book = placed[index]!;
-      const target = book.bookId === focus ? 0.16 : index === hover ? 0.035 : 0;
+      const litHere = lit && book.bookId !== null && lit.has(book.bookId);
+      const target =
+        book.bookId === focus ? 0.16 : book.bookId === peek ? 0.08 : index === hover ? 0.035 : litHere ? 0.03 : 0;
       const currentPull = pull.current[index] ?? 0;
       const next = THREE.MathUtils.damp(currentPull, target, 8, delta);
       if (Math.abs(next - currentPull) < 0.0003) continue;
@@ -575,7 +624,7 @@ export function Books({
     const canvas = event.nativeEvent.target as HTMLElement;
     hoverIndex.current = index;
     lastHover.current = { index, x: event.nativeEvent.clientX, y: event.nativeEvent.clientY };
-    hoverTip.show(book.title, event.nativeEvent.clientX, event.nativeEvent.clientY);
+    hoverTip.show(book.title, book.author, event.nativeEvent.clientX, event.nativeEvent.clientY);
     canvas.style.cursor = book.bookId ? "pointer" : "default";
   }
 
@@ -626,6 +675,30 @@ export function Books({
           </Text>
         </group>
       ))}
+      {plaques.map((plaque) => {
+        const section = sections[plaque.genre];
+        if (!section) return null;
+        return (
+          <Html
+            key={`label-${plaque.id}`}
+            position={[plaque.position[0], -0.06, plaque.position[2] + 0.04]}
+            center
+            zIndexRange={[5, 0]}
+            className={`shelf-label ${far ? "show" : ""} ${section.state}`}
+          >
+            <button
+              type="button"
+              tabIndex={far ? 0 : -1}
+              aria-hidden={!far}
+              onClick={() => onShelf(plaque.genre)}
+              aria-label={`${section.label}, ${section.count} ${section.count === 1 ? "book" : "books"}`}
+            >
+              <span>{section.label}</span>
+              <em>{section.count}</em>
+            </button>
+          </Html>
+        );
+      })}
     </group>
   );
 }

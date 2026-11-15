@@ -3,17 +3,18 @@
 import { useState } from "react";
 import type { Book } from "@/lib/types";
 import { BookPopup } from "./BookPopup";
+import { shelfInfo } from "@/lib/genres";
 
 export function FallbackLibrary({ books, reason }: { books: Book[]; reason: "small" | "webgl" }) {
   const [open, setOpen] = useState<Book | null>(null);
   return (
     <main className="fallback">
       <p className="kicker">The Library</p>
-      <h1>This library is best experienced on a desktop.</h1>
+      <h1>The room opens on a larger screen.</h1>
       <p className="lede">
         {reason === "webgl"
-          ? "This browser cannot open the reading room, so the shelves are listed here instead."
-          : "The room is built for a large screen. The collection is below, plainly."}
+          ? "This browser can't draw the reading room, so every book is listed below instead."
+          : "Open this on a laptop or desktop to walk the shelves. Every book is listed below in the meantime."}
       </p>
       <ul>
         {books.map((book) => (
@@ -21,7 +22,7 @@ export function FallbackLibrary({ books, reason }: { books: Book[]; reason: "sma
             <button type="button" onClick={() => setOpen(book)}>
               <span>{book.title}</span>
               <span>{book.author}</span>
-              <span>{book.genre}</span>
+              <span>{shelfInfo(book.genre).label}</span>
             </button>
           </li>
         ))}

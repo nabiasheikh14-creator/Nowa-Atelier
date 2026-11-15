@@ -78,13 +78,13 @@ const SYNOPSES: Record<string, string> = {
   "If You Could See the Sun":
     "Alice Sun is a scholarship student at an elite Beijing boarding school, working constantly to justify a place her classmates were born into. She discovers she can turn invisible, and invisibility turns out to be something other students will pay for. The favors get larger, and the cost of staying unseen starts to include the people she is trying not to lose.",
   "Nothing Like the Movies":
-    "The list said Nothing Like the Sun by Lin Painter. The novel on this shelf is Nothing Like the Movies by Lynn Painter, a romantic comedy about a second chance. Liz and Wes had a movie-shaped love story that broke, and a later meeting asks whether they can want each other without the script that made the first version look easy.",
+    "A romantic comedy about a second chance. Liz and Wes had a movie-shaped love story that broke, and a later meeting asks whether they can want each other without the script that made the first version look easy.",
   "Book Lovers":
     "Nora Stephens is a New York literary agent who has been cast, more than once, as the cold city girlfriend in someone else's small-town romance. A month in North Carolina with her sister puts her across the table from Charlie Lastra, an editor she already dislikes. The book is about two people who know the tropes and still have to find out what they want when the story will not follow them.",
   "Before I Go":
     "Daisy has terminal cancer and becomes convinced that her husband, Jack, will not manage their life, or their dog, without her. She sets out to find him a new wife before she dies. The plan forces her to look at the marriage she is trying to replace herself in, and at the difference between loving someone and arranging them.",
   "Slow Burn":
-    "Listed under Julia Garwood; the romantic suspense of this title is Julie Garwood's. Kate MacKenna, who has built a fragrance business near Charleston, survives an explosion and then learns that her late mother left the company in debt. A second attempt on her life brings Dylan Buchanan, a Boston detective and her best friend's brother, into her house. He is there to find out who wants her dead, and neither of them is good at pretending that is all he is there for.",
+    "Kate MacKenna, who has built a fragrance business near Charleston, survives an explosion and then learns that her late mother left the company in debt. A second attempt on her life brings Dylan Buchanan, a Boston detective and her best friend's brother, into her house. He is there to find out who wants her dead, and neither of them is good at pretending that is all he is there for.",
   "Can You Keep a Secret?":
     "Emma Corrigan, convinced the plane is going down, tells a sympathetic stranger every secret she has, including what she thinks of her job. He turns out to be Jack Harper, the head of the company she works for, and he remembers all of it. The comedy is what happens when the person who knows too much is also the person she has to face on Monday.",
   "Every Breath":
@@ -112,7 +112,7 @@ const SYNOPSES: Record<string, string> = {
   "The Midwife's Daughter":
     "In a Cornish town before and during the First World War, Violet Dimond is the local handywoman who delivers babies the doctor does not bother with. Her twin brings her a dying child from an orphanage, a Black girl who resembles the daughter Violet lost, and Violet raises her as Grace. The novel moves among Violet, her sister, and Grace as the town's prejudice and the war press on a household that had looked settled.",
   "Rumi's Daughter":
-    "The list named Muriel Maffrey. The novel is Muriel Maufroy's story of Kimya, a girl in thirteenth-century Anatolia who is drawn into the circle of Rumi and his teacher Shams of Tabriz. Kimya is married into that household and has to make a spiritual life inside a love, and a jealousy, that the men around her treat as destiny. The book imagines the daughter and the wife at the edge of a story usually told only about the poet.",
+    "Muriel Maufroy's story of Kimya, a girl in thirteenth-century Anatolia who is drawn into the circle of Rumi and his teacher Shams of Tabriz. Kimya is married into that household and has to make a spiritual life inside a love, and a jealousy, that the men around her treat as destiny. The book imagines the daughter and the wife at the edge of a story usually told only about the poet.",
   "Best of Friends":
     "Maryam and Zahra grow up in Karachi as inseparable girls and meet again as powerful women in London, one in politics and one in finance. A secret from a single night in their teens has shaped what each of them thinks the other owes her. The novel follows a friendship across class, migration, and the moment when private loyalty collides with public power.",
   "The Bee Sting":
@@ -214,7 +214,7 @@ const SYNOPSES: Record<string, string> = {
   "The Artist's Way":
     "Julia Cameron's twelve-week course for people who have stopped making things. The method is concrete: morning pages, a weekly walk alone, and a series of tasks meant to loosen the grip of perfection and other people's opinions. It is a workbook as much as an essay, and it asks the reader to do the assignments rather than agree with them.",
   "Are Men Obsolete?":
-    "The list said Camila Paglia. The book is a public debate between Camille Paglia and Caitlin Moran, two essays answering the question in the title and then answering each other. One argues from a long view of sex, art, and danger. The other argues from the daily politics of feminism now. It is an argument, not a verdict.",
+    "A public debate between Camille Paglia and Caitlin Moran, two essays answering the question in the title and then answering each other. One argues from a long view of sex, art, and danger. The other argues from the daily politics of feminism now. It is an argument, not a verdict.",
   "Urdu Dictionary":
     "A language dictionary, kept for looking a word up rather than for reading through. It sits with the other books that are tools: no plot, no narrator, and a different kind of use. The shelf treats it as part of the collection because it is in the room and it gets opened.",
   "University publication magazine":

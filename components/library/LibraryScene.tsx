@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import type { Book } from "@/lib/types";
 import { placeCollection } from "@/lib/placement";
-import { Books } from "./Books";
+import { Books, type SectionLabel } from "./Books";
 import { CameraRig, type FocusRequest } from "./CameraRig";
 import { Dust } from "./Dust";
 import { Room } from "./Room";
@@ -20,7 +20,15 @@ export function LibraryScene({
   onArrive,
   onIntroDone,
   onInteract,
+  litIds,
+  peekId,
+  sections,
+  onShelf,
 }: {
+  litIds: Set<string> | null;
+  peekId: string | null;
+  sections: Record<string, SectionLabel>;
+  onShelf: (genre: string) => void;
   books: Book[];
   focus: FocusRequest;
   popup: boolean;
@@ -60,7 +68,16 @@ export function LibraryScene({
       <directionalLight position={[-2.2, 3.4, 2.4]} intensity={1.15} color={"#d5e1f2"} />
       <pointLight position={[0, 2.1, 0.4]} intensity={6} distance={9} decay={2} color={"#ffe1c2"} />
       <Room room={layout.room} frames={layout.frames} />
-      <Books placed={layout.placed} plaques={layout.plaques} focusId={focus?.id ?? null} onOpen={onOpen} />
+      <Books
+        placed={layout.placed}
+        plaques={layout.plaques}
+        focusId={focus?.id ?? null}
+        litIds={litIds}
+        peekId={peekId}
+        sections={sections}
+        onOpen={onOpen}
+        onShelf={onShelf}
+      />
       <Dust count={48} bounds={dust} color={"#efe2cc"} size={0.018} />
       <CameraRig
         placed={layout.placed}

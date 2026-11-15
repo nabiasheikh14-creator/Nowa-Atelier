@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { Book } from "./types";
 import { hashString, mulberry32, range } from "./random";
 import { layoutRoom, type RoomPlan, type ShelfFrame } from "./room-plan";
+import { shelfInfo } from "./genres";
 import { SPINE_ASPECT, spineArt } from "./spine-design";
 
 export type PlacedBook = {
@@ -24,6 +25,7 @@ export type PlacedBook = {
 export type Plaque = {
   id: string;
   label: string;
+  genre: string;
   position: [number, number, number];
   yaw: number;
   width: number;
@@ -95,7 +97,8 @@ export function placeCollection(books: Book[]): {
     const owned = byGenre.get(frame.genre) ?? [];
     plaques.push({
       id: frame.id,
-      label: frame.genre,
+      label: shelfInfo(frame.genre).label,
+      genre: frame.genre,
       yaw: frame.yaw,
       width: frame.width,
         position: [
