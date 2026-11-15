@@ -24,7 +24,8 @@ export function Room({ room, frames }: { room: RoomPlan; frames: ShelfFrame[] })
     texture.anisotropy = 8;
     return texture;
   }, []);
-  const rugWidth = Math.min(2.6, room.width * 0.55);
+  // Narrower than the wall, so it frames the shelves instead of competing with them.
+  const rugWidth = Math.min(2.2, room.width * 0.46);
   const globe = useMemo(() => makeGlobeTexture(), []);
   const shelves = useMemo(() => buildShelfGeometry(frames), [frames]);
   const shell = useMemo(() => buildShellGeometry(room), [room]);
@@ -70,7 +71,7 @@ export function Room({ room, frames }: { room: RoomPlan; frames: ShelfFrame[] })
       {/* Laid just in front of the shelves, where the camera can actually see it. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, -room.inner.z + 0.26 + 0.14 + (rugWidth * RUG_ASPECT) / 2]}>
         <planeGeometry args={[rugWidth, rugWidth * RUG_ASPECT]} />
-        <meshStandardMaterial map={rug} roughness={0.96} />
+        <meshStandardMaterial map={rug} color={"#b8a89c"} roughness={1} />
       </mesh>
       <Chair room={room} />
       <SideTable room={room} />

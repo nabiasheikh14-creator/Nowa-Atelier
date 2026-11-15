@@ -14,7 +14,9 @@ import {
   type Filter,
 } from "@/lib/genres";
 import { BookPopup } from "./BookPopup";
-import { FallbackLibrary } from "./FallbackLibrary";
+import { ShelfBrowser } from "./ShelfBrowser";
+import { initialPlace, usePlace } from "./use-place";
+import type { Place } from "@/lib/links";
 import { hoverTip } from "./input-state";
 import type { FocusRequest } from "./CameraRig";
 
@@ -47,16 +49,39 @@ function subscribeMode() {
   return () => {};
 }
 
+/** Where the camera should be for a given place in the library. */
+function focusFor(place: Place, books: Book[]): FocusRequest {
+  if (place.bookId) return { id: place.bookId, intent: "open" };
+  const filter = place.filter;
+  if (filter?.kind === "shelf") return { id: filter.shelf, intent: "section" };
+  if (filter?.kind === "tag") {
+    const ids = books.filter((book) => matches(book, filter)).map((book) => book.id);
+    return { id: `tag:${filter.tag}`, intent: "frame", ids };
+  }
+  return null;
+}
+
 export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
   const [books] = useState(initialBooks);
   const mode = useSyncExternalStore(subscribeMode, readMode, () => "checking" as Mode);
-  const [focus, setFocus] = useState<FocusRequest>(null);
+  const [focus, setFocus] = useState<FocusRequest>(() => focusFor(initialPlace(books), books));
   const [popup, setPopup] = useState(false);
+  // Arriving on a link skips the intro and goes straight to the book or shelf.
+  const [skipIntro, setSkipIntro] = useState(() => {
+    const arrived = initialPlace(books);
+    return Boolean(arrived.bookId || arrived.filter);
+  });
+  const { place, go } = usePlace(books, (next, previous) => {
+    // Back and forward buttons: move the camera to match the address.
+    setPopup(false);
+    if (next.bookId || next.filter) setFocus(focusFor(next, books));
+    else if (previous.bookId) setFocus(null);
+    else setFocus({ id: "room", intent: "home" });
+  });
+  const filter = place.filter;
   const [introDone, setIntroDone] = useState(false);
-  const [skipIntro, setSkipIntro] = useState(false);
   const [moved, setMoved] = useState(false);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>(null);
   const [moreChips, setMoreChips] = useState(false);
   const [peekId, setPeekId] = useState<string | null>(null);
   const [audioOn, setAudioOn] = useState(false);
@@ -125,31 +150,40 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
     setFocus({ id, intent: "highlight" });
   }
 
+  function setFilter(next: Filter) {
+    go({ filter: next, bookId: null });
+  }
+
   function openFromShelf(id: string) {
     setPopup(false);
+    go({ bookId: id });
     setFocus({ id, intent: "open" });
   }
 
   function closeBook() {
     setPopup(false);
+    go({ bookId: null });
     setFocus(null);
   }
 
   const showRoom = useCallback(() => {
     setPopup(false);
     setQuery("");
-    setFilter(null);
+    go({ filter: null, bookId: null });
     setMoreChips(false);
     setFocus({ id: "room", intent: "home" });
-  }, []);
+  }, [go]);
 
-  const showShelf = useCallback((genre: string) => {
-    setPopup(false);
-    setQuery("");
-    setFilter({ kind: "shelf", shelf: genre, tag: null });
-    setMoreChips(false);
-    setFocus({ id: genre, intent: "section" });
-  }, []);
+  const showShelf = useCallback(
+    (genre: string) => {
+      setPopup(false);
+      setQuery("");
+      go({ filter: { kind: "shelf", shelf: genre, tag: null }, bookId: null });
+      setMoreChips(false);
+      setFocus({ id: genre, intent: "section" });
+    },
+    [go],
+  );
 
   function pickTag(tag: string | null) {
     setPopup(false);
@@ -176,7 +210,7 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
       showShelf(next.shelf);
       return;
     }
-    setFilter(next);
+    go({ filter: next, bookId: null });
     setMoreChips(false);
     const ids = books.filter((book) => matches(book, next)).map((book) => book.id);
     setFocus({ id: `tag:${next.tag}`, intent: "frame", ids });
@@ -191,12 +225,12 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
         setQuery("");
         return;
       }
-      if (filter?.kind === "shelf" && filter.tag) setFilter({ ...filter, tag: null });
+      if (filter?.kind === "shelf" && filter.tag) go({ filter: { ...filter, tag: null } });
       else if (filter) showRoom();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [filter, popup, query, showRoom]);
+  }, [filter, go, popup, query, showRoom]);
 
   if (mode === "checking") {
     return (
@@ -206,7 +240,10 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
     );
   }
   if (mode === "small" || mode === "webgl") {
-    return <FallbackLibrary books={books} reason={mode === "small" ? "small" : "webgl"} />;
+    return <ShelfBrowser books={books} place={place} go={go} variant={mode === "small" ? "phone" : "webgl"} />;
+  }
+  if (place.view === "list") {
+    return <ShelfBrowser books={books} place={place} go={go} variant="list" onRoom={() => go({ view: "room", bookId: null })} />;
   }
 
   const shelf = filter?.kind === "shelf" ? shelfInfo(filter.shelf) : null;
@@ -403,6 +440,9 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
           Drag to look · A / D to walk · Scroll to step closer · Click a spine to open it
         </p>
       )}
+      <button className="list-toggle" type="button" onClick={() => go({ view: "list", bookId: null })}>
+        List view
+      </button>
       <button
         className={`tone ${audioOn ? "on" : ""}`}
         type="button"
