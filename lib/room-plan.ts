@@ -14,9 +14,12 @@ export const GENRE_ORDER = [
   "Reference",
 ] as const;
 
-export const SHELF_YS = [0.24, 0.76, 1.28];
+// Four shelves, floor to near ceiling: a library wall, and room for bigger collections.
+export const SHELF_YS = [0.22, 0.74, 1.26, 1.78];
+/** Top of the case including the crown moulding, used to frame the camera. */
+export const CASE_HEIGHT = 2.5;
 const CASE_DEPTH = 0.26;
-const SLOT = 0.05;
+const SLOT = 0.058;
 const BAY_PAD = 0.07;
 const MIN_BAY = 0.16;
 const POST = 0.038;
@@ -60,10 +63,13 @@ export function layoutRoom(counts: { genre: string; count: number }[]): { room: 
   const span = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, widths.length - 1) * POST;
 
   const wall = 0.1;
-  const height = 2.22;
-  // Vertical fov is 60°. Fit the wall to a desktop window that is a little taller than 16:10.
+  const height = 2.95;
+  // Vertical fov is 60°. Fit the whole case, side to side and floor to cornice, in a desktop
+  // window a little taller than 16:10, leaving room for the header over the top of the frame.
   const halfHorizontal = Math.atan(Math.tan((30 * Math.PI) / 180) * 1.4);
-  const view = span / 2 / Math.tan(halfHorizontal) + 0.42;
+  const across = span / 2 / Math.tan(halfHorizontal) + 0.42;
+  const upright = (CASE_HEIGHT * 1.2) / 2 / Math.tan((30 * Math.PI) / 180);
+  const view = Math.max(across, upright);
   const depth = view + CASE_DEPTH + 0.85 + wall * 2;
   const width = span + SIDE * 2 + wall * 2;
   const inner = { x: width / 2 - wall, z: depth / 2 - wall };
@@ -93,7 +99,7 @@ export function layoutRoom(counts: { genre: string; count: number }[]): { room: 
     height,
     wall,
     inner,
-    home: { x: 0, y: 0.98, z: Math.min(homeZ, inner.z - 0.34), yaw: 0, pitch: 0 },
+    home: { x: 0, y: CASE_HEIGHT / 2 + 0.16, z: Math.min(homeZ, inner.z - 0.34), yaw: 0, pitch: 0 },
     bounds: {
       minX: -span / 2 + 0.02,
       maxX: span / 2 - 0.02,

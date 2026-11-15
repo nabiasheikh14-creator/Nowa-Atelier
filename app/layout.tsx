@@ -8,6 +8,13 @@ const display = localFont({
   src: "../public/fonts/ScopeOne-Regular.ttf",
   variable: "--font-display",
   display: "swap",
+  // Scope One ships with a very deep descent (928 up, 455 down), so text sits high in any
+  // box: chips, buttons, inputs. Rebalancing the line box around the x-height centres it.
+  declarations: [
+    { prop: "ascent-override", value: "95%" },
+    { prop: "descent-override", value: "35%" },
+    { prop: "line-gap-override", value: "0%" },
+  ],
 });
 
 const body = Source_Serif_4({

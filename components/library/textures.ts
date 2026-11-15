@@ -239,3 +239,103 @@ export function makeRainTexture(): THREE.CanvasTexture {
   const texture = canvasTexture(canvas, [2, 2.6]);
   return texture;
 }
+
+/** The view by day: soft blue sky, a few clouds, and the same skyline in hazy daylight. */
+export function makeDayTexture(): THREE.CanvasTexture {
+  const w = 512;
+  const h = 704;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  let seed = 7;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, "#7fb2df");
+  sky.addColorStop(0.6, "#b9d6ee");
+  sky.addColorStop(0.85, "#e6eef2");
+  sky.addColorStop(1, "#efe8dc");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, h);
+
+  // sun glare high on the left, where the light comes from
+  const glare = ctx.createRadialGradient(w * 0.2, h * 0.12, 0, w * 0.2, h * 0.12, 260);
+  glare.addColorStop(0, "rgba(255, 250, 230, 0.95)");
+  glare.addColorStop(0.25, "rgba(255, 244, 214, 0.45)");
+  glare.addColorStop(1, "rgba(255, 244, 214, 0)");
+  ctx.fillStyle = glare;
+  ctx.fillRect(0, 0, w, h);
+
+  for (let i = 0; i < 7; i++) {
+    const cx = rand() * w;
+    const cy = h * (0.12 + rand() * 0.4);
+    for (let puff = 0; puff < 6; puff++) {
+      const px = cx + (rand() - 0.5) * 120;
+      const py = cy + (rand() - 0.5) * 22;
+      const r = 24 + rand() * 34;
+      const cloud = ctx.createRadialGradient(px, py, 0, px, py, r);
+      cloud.addColorStop(0, "rgba(255, 255, 255, 0.55)");
+      cloud.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = cloud;
+      ctx.fillRect(px - r, py - r, r * 2, r * 2);
+    }
+  }
+
+  const layers = [
+    { base: h * 0.8, tall: 90, color: "#a9b7c6" },
+    { base: h * 0.9, tall: 70, color: "#8c98a6" },
+  ];
+  for (const layer of layers) {
+    let x = -10;
+    while (x < w + 10) {
+      const bw = 24 + rand() * 46;
+      const bh = 20 + rand() * layer.tall;
+      const top = layer.base - bh;
+      ctx.fillStyle = layer.color;
+      ctx.fillRect(x, top, bw, h - top);
+      for (let wy = top + 8; wy < h - 6; wy += 10) {
+        for (let wx = x + 5; wx < x + bw - 6; wx += 8) {
+          if (rand() < 0.25) {
+            ctx.fillStyle = `rgba(230, 238, 246, ${0.25 + rand() * 0.25})`;
+            ctx.fillRect(wx, wy, 3, 4);
+          }
+        }
+      }
+      x += bw + rand() * 3;
+    }
+  }
+  const haze = ctx.createLinearGradient(0, h * 0.6, 0, h);
+  haze.addColorStop(0, "rgba(240, 236, 226, 0)");
+  haze.addColorStop(1, "rgba(240, 236, 226, 0.45)");
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, h * 0.6, w, h * 0.4);
+  return canvasTexture(canvas);
+}
+
+/** The window's shape in sunlight on the floor: four soft panes and the cross of the mullions. */
+export function makeSunPatchTexture(): THREE.CanvasTexture {
+  const w = 256;
+  const h = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, w, h);
+  ctx.filter = "blur(7px)";
+  ctx.fillStyle = "#fff";
+  const pad = 22;
+  const bar = 9;
+  const midX = w / 2;
+  const midY = h * 0.38;
+  ctx.fillRect(pad, pad, midX - pad - bar / 2, midY - pad - bar / 2);
+  ctx.fillRect(midX + bar / 2, pad, w - pad - midX - bar / 2, midY - pad - bar / 2);
+  ctx.fillRect(pad, midY + bar / 2, midX - pad - bar / 2, h - pad - midY - bar / 2);
+  ctx.fillRect(midX + bar / 2, midY + bar / 2, w - pad - midX - bar / 2, h - pad - midY - bar / 2);
+  ctx.filter = "none";
+  const texture = new THREE.CanvasTexture(canvas);
+  return texture;
+}

@@ -191,11 +191,45 @@ const SPINES: Record<string, SpineArt> = {
   "The Prophet": plain("#f3ead4", "#1a140c", { band: "#1e3a5a" }),
 };
 
+/** Edition palettes for books without a hand-made spine: ground, ink, band. */
+const PALETTES: [string, string, string][] = [
+  ["#1c2c4a", "#f0e2c4", "#c6a15e"],
+  ["#6e2433", "#f3e6cc", "#d7b56a"],
+  ["#1e3d34", "#efe3c8", "#c9a868"],
+  ["#f3ead7", "#1c140c", "#7a3b2e"],
+  ["#2b2b2e", "#f2ede4", "#c94f3a"],
+  ["#e9dcc0", "#2a1d12", "#1e3a5a"],
+  ["#8a7044", "#1a120c", "#1a120c"],
+  ["#3f4a32", "#f3ead8", "#d8c08a"],
+  ["#f7f4ee", "#24304a", "#24304a"],
+  ["#4a2c3d", "#f1e4d2", "#d4af67"],
+  ["#c75b39", "#1b120c", "#1b120c"],
+  ["#243044", "#f6efe4", "#9fb4cf"],
+];
+
+function hash(text: string): number {
+  let value = 2166136261;
+  for (let index = 0; index < text.length; index++) {
+    value ^= text.charCodeAt(index);
+    value = Math.imul(value, 16777619);
+  }
+  return value >>> 0;
+}
+
+/**
+ * A spine for any title. Hand-made designs win; otherwise a believable edition is
+ * chosen from the title, so a new library never comes out all cream.
+ */
 export function spineArt(title: string): SpineArt {
-  return (
-    SPINES[title] ??
-    plain("#f3ead7", "#1c140c", { face: "serif" })
-  );
+  const made = SPINES[title];
+  if (made) return made;
+  const seed = hash(title);
+  const [ground, ink, band] = PALETTES[seed % PALETTES.length]!;
+  const face = (seed >> 4) % 3 === 0 ? "sans" : "serif";
+  const casing: SpineCasing = face === "sans" ? "upper" : (seed >> 6) % 4 === 0 ? "upper" : "title";
+  return (seed >> 8) % 3 === 0
+    ? banded(ground, ink, band, { face, casing })
+    : plain(ground, ink, { face, casing, band });
 }
 
 export function spineAuthor(author: string, art: SpineArt): string {

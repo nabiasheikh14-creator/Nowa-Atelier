@@ -49,6 +49,20 @@ function subscribeMode() {
   return () => {};
 }
 
+/** Day or night: the visitor's last choice, otherwise their local time of day. */
+function startingLight(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const saved = window.localStorage.getItem("library-light");
+    if (saved === "day") return true;
+    if (saved === "night") return false;
+  } catch {
+    // storage can be unavailable (private mode, embedded views); fall back to the clock
+  }
+  const hour = new Date().getHours();
+  return hour >= 7 && hour < 18;
+}
+
 /** Where the camera should be for a given place in the library. */
 function focusFor(place: Place, books: Book[]): FocusRequest {
   if (place.bookId) return { id: place.bookId, intent: "open" };
@@ -81,6 +95,8 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
   const filter = place.filter;
   const [introDone, setIntroDone] = useState(false);
   const [moved, setMoved] = useState(false);
+  const [day, setDay] = useState(startingLight);
+  const [dimming, setDimming] = useState(false);
   const [query, setQuery] = useState("");
   const [moreChips, setMoreChips] = useState(false);
   const [peekId, setPeekId] = useState<string | null>(null);
@@ -148,6 +164,25 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
     setPopup(false);
     setQuery("");
     setFocus({ id, intent: "highlight" });
+  }
+
+  // The room fades briefly to dark, the light changes, and it fades back up.
+  function toggleLight() {
+    const next = !day;
+    try {
+      window.localStorage.setItem("library-light", next ? "day" : "night");
+    } catch {
+      // not remembered; it still switches for this visit
+    }
+    if (reducedMotion) {
+      setDay(next);
+      return;
+    }
+    setDimming(true);
+    window.setTimeout(() => {
+      setDay(next);
+      window.setTimeout(() => setDimming(false), 120);
+    }, 260);
   }
 
   function setFilter(next: Filter) {
@@ -255,7 +290,8 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
   const activeTag = filter?.kind === "tag" ? filter.tag : filter?.kind === "shelf" ? filter.tag : null;
 
   return (
-    <main className={`stage ${popup ? "book-open" : ""}`}>
+    <main className={`stage ${popup ? "book-open" : ""} ${day ? "day" : "night"}`}>
+      <div className={`light-fade ${dimming ? "on" : ""}`} aria-hidden="true" />
       <LibraryScene
         books={books}
         focus={focus}
@@ -264,6 +300,7 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
         skipIntro={skipIntro}
         litIds={litIds}
         peekId={peekId}
+        day={day}
         shelfLabel={(genre) => shelfInfo(genre).label}
         activeShelf={activeShelf}
         onShelf={showShelf}
@@ -440,6 +477,15 @@ export function LibraryExperience({ initialBooks }: { initialBooks: Book[] }) {
           Drag to look · A / D to walk · Scroll to step closer · Click a spine to open it
         </p>
       )}
+      <button
+        className="light-toggle"
+        type="button"
+        onClick={toggleLight}
+        aria-label={day ? "Switch the room to night" : "Switch the room to day"}
+      >
+        <i aria-hidden="true" className={day ? "sun" : "moon"} />
+        {day ? "Day" : "Night"}
+      </button>
       <button className="list-toggle" type="button" onClick={() => go({ view: "list", bookId: null })}>
         List view
       </button>

@@ -5,7 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { RoomPlan, ShelfFrame } from "@/lib/room-plan";
 import { buildShelfGeometry, buildShellGeometry } from "./build-room";
-import { makeFloorTexture, makeGlobeTexture, makeNightTexture, makeRainTexture } from "./textures";
+import { makeDayTexture, makeFloorTexture, makeGlobeTexture, makeNightTexture, makeRainTexture, makeSunPatchTexture } from "./textures";
 
 /** The rug photo is 1252 × 736 after rotating, so it lies along the wall. */
 const RUG_ASPECT = 736 / 1252;
@@ -16,7 +16,7 @@ const wall = "#1b2c24";
 const brass = "#b08d57";
 const velvet = "#6c2432";
 
-export function Room({ room, frames }: { room: RoomPlan; frames: ShelfFrame[] }) {
+export function Room({ room, frames, day }: { room: RoomPlan; frames: ShelfFrame[]; day: boolean }) {
   const floor = useMemo(() => makeFloorTexture(), []);
   const rug = useMemo(() => {
     const texture = new THREE.TextureLoader().load("/textures/rug.jpg");
@@ -61,29 +61,32 @@ export function Room({ room, frames }: { room: RoomPlan; frames: ShelfFrame[] })
         </mesh>
       ))}
       <mesh geometry={shelves.backs}>
-        <meshStandardMaterial color={"#140e0b"} roughness={0.95} />
+        <meshStandardMaterial vertexColors roughness={0.9} />
       </mesh>
       <mesh geometry={shelves.carcass}>
-        <meshStandardMaterial color={wood} roughness={0.64} metalness={0.05} />
+        <meshStandardMaterial vertexColors roughness={0.52} metalness={0.04} />
       </mesh>
-      <Window room={room} />
-      <Fireplace room={room} />
+      <LibraryLadder frames={frames} />
+      <Window room={room} day={day} />
+      {day && <Sunlight room={room} />}
+      <Fireplace room={room} lit={!day} />
       {/* Laid just in front of the shelves, where the camera can actually see it. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, -room.inner.z + 0.26 + 0.14 + (rugWidth * RUG_ASPECT) / 2]}>
         <planeGeometry args={[rugWidth, rugWidth * RUG_ASPECT]} />
         <meshStandardMaterial map={rug} color={"#b8a89c"} roughness={1} />
       </mesh>
-      <Desk room={room} />
+      <Desk room={room} lit={!day} />
       <Chair room={room} />
-      <SideTable room={room} />
+      <SideTable room={room} lit={!day} />
       <Globe room={room} map={globe} />
     </group>
   );
 }
 
-function Window({ room }: { room: RoomPlan }) {
+function Window({ room, day }: { room: RoomPlan; day: boolean }) {
   const x = -room.inner.x + 0.02;
   const night = useMemo(() => makeNightTexture(), []);
+  const daylight = useMemo(() => makeDayTexture(), []);
   const rain = useMemo(() => makeRainTexture(), []);
   const W = 0.85;
   const H = 1.15;
@@ -99,10 +102,10 @@ function Window({ room }: { room: RoomPlan }) {
       {/* the night outside */}
       <mesh position={[0, 0, 0.004]}>
         <planeGeometry args={[W, H]} />
-        <meshBasicMaterial map={night} color={"#c9cfdc"} toneMapped={false} />
+        <meshBasicMaterial map={day ? daylight : night} color={day ? "#ffffff" : "#c9cfdc"} toneMapped={false} />
       </mesh>
       {/* glass with rain on it */}
-      <mesh position={[0, 0, 0.012]}>
+      <mesh position={[0, 0, 0.012]} visible={!day}>
         <planeGeometry args={[W, H]} />
         <meshBasicMaterial ref={glass} map={rain} transparent opacity={0.85} depthWrite={false} toneMapped={false} />
       </mesh>
@@ -150,12 +153,18 @@ function Window({ room }: { room: RoomPlan }) {
         <meshStandardMaterial color={brass} metalness={0.8} roughness={0.3} />
       </mesh>
       {/* a faint cool spill of moonlight into the room */}
-      <pointLight position={[0, 0.1, 0.5]} color={"#8fa6d6"} intensity={0.7} distance={2.2} decay={2} />
+      <pointLight
+        position={[0, 0.1, 0.5]}
+        color={day ? "#fff0d8" : "#8fa6d6"}
+        intensity={day ? 5 : 0.7}
+        distance={day ? 4 : 2.2}
+        decay={2}
+      />
     </group>
   );
 }
 
-function Fireplace({ room }: { room: RoomPlan }) {
+function Fireplace({ room, lit }: { room: RoomPlan; lit: boolean }) {
   const fire = useRef<THREE.Mesh>(null);
   const glow = useRef<THREE.PointLight>(null);
   useFrame(({ clock }) => {
@@ -173,11 +182,19 @@ function Fireplace({ room }: { room: RoomPlan }) {
         <boxGeometry args={[0.62, 0.55, 0.08]} />
         <meshStandardMaterial color={"#090807"} roughness={1} />
       </mesh>
-      <mesh ref={fire} position={[0, 0.48, 0.28]}>
+      <mesh ref={fire} position={[0, 0.48, 0.28]} visible={lit}>
         <coneGeometry args={[0.06, 0.22, 8]} />
         <meshStandardMaterial color={"#ffd7a1"} emissive={"#ffb15e"} emissiveIntensity={3} />
       </mesh>
-      <pointLight ref={glow} position={[0, 0.55, 0.45]} color={"#ff8a45"} distance={4.5} decay={2} intensity={6} />
+      <pointLight ref={glow} position={[0, 0.55, 0.45]} color={"#ff8a45"} distance={4.5} decay={2} intensity={6} visible={lit} />
+      {/* by day the grate holds a couple of unlit logs */}
+      {!lit &&
+        [-0.08, 0.08].map((offset) => (
+          <mesh key={offset} position={[offset, 0.4, 0.27]} rotation={[0, 0.3 * Math.sign(offset), Math.PI / 2]}>
+            <cylinderGeometry args={[0.035, 0.035, 0.26, 8]} />
+            <meshStandardMaterial color={"#3a2618"} roughness={0.95} />
+          </mesh>
+        ))}
       <mesh position={[0, 1.35, 0.16]}>
         <boxGeometry args={[1.4, 0.08, 0.28]} />
         <meshStandardMaterial color={wood} roughness={0.55} />
@@ -202,7 +219,7 @@ function Chair({ room }: { room: RoomPlan }) {
 }
 
 /** A round side table with a fabric-shaded lamp and two books, by the reading chair. */
-function SideTable({ room }: { room: RoomPlan }) {
+function SideTable({ room, lit }: { room: RoomPlan; lit: boolean }) {
   const top = 0.56;
   return (
     <group position={[-room.inner.x + 0.46, 0, room.inner.z - 1.05]} scale={0.72}>
@@ -246,7 +263,7 @@ function SideTable({ room }: { room: RoomPlan }) {
           <meshStandardMaterial
             color={"#e9dcc0"}
             emissive={"#ffbf73"}
-            emissiveIntensity={0.55}
+            emissiveIntensity={lit ? 0.55 : 0}
             roughness={0.95}
             side={THREE.DoubleSide}
           />
@@ -259,7 +276,7 @@ function SideTable({ room }: { room: RoomPlan }) {
           <torusGeometry args={[0.11, 0.004, 6, 28]} />
           <meshStandardMaterial color={brass} metalness={0.8} roughness={0.3} />
         </mesh>
-        <pointLight position={[0, 0.26, 0]} color={"#ffb56a"} intensity={3.2} distance={3} decay={2} />
+        <pointLight position={[0, 0.26, 0]} color={"#ffb56a"} intensity={lit ? 3.2 : 0} distance={3} decay={2} />
       </group>
 
       {/* two books, one left open-face down */}
@@ -295,7 +312,7 @@ function Globe({ room, map }: { room: RoomPlan; map: THREE.CanvasTexture }) {
 }
 
 /** A writing desk in the back-left corner, beside the shelves: lamp, books, chai. */
-function Desk({ room }: { room: RoomPlan }) {
+function Desk({ room, lit }: { room: RoomPlan; lit: boolean }) {
   const x = -room.inner.x + 0.38;
   const z = -room.inner.z + 0.3;
   const top = 0.74;
@@ -350,13 +367,13 @@ function Desk({ room }: { room: RoomPlan }) {
         {/* the shade lies on its side, a green half-tube over the bulb */}
         <mesh position={[0, 0.25, 0.03]} rotation={[0, 0, Math.PI / 2]} scale={[1, 1, 0.8]}>
           <cylinderGeometry args={[0.05, 0.05, 0.2, 20, 1, true, Math.PI / 2, Math.PI]} />
-          <meshStandardMaterial color={"#1f5a3c"} emissive={"#1f6a45"} emissiveIntensity={0.28} roughness={0.25} side={THREE.DoubleSide} />
+          <meshStandardMaterial color={"#1f5a3c"} emissive={"#1f6a45"} emissiveIntensity={lit ? 0.28 : 0} roughness={0.25} side={THREE.DoubleSide} />
         </mesh>
         <mesh position={[0, 0.238, 0.03]} rotation={[0, 0, Math.PI / 2]}>
           <cylinderGeometry args={[0.012, 0.012, 0.15, 8]} />
-          <meshStandardMaterial color={"#fff1d6"} emissive={"#ffd08a"} emissiveIntensity={3} />
+          <meshStandardMaterial color={"#fff1d6"} emissive={"#ffd08a"} emissiveIntensity={lit ? 3 : 0} />
         </mesh>
-        <pointLight position={[0, 0.18, 0.06]} color={"#ffc27a"} intensity={3.2} distance={2.6} decay={2} />
+        <pointLight position={[0, 0.18, 0.06]} color={"#ffc27a"} intensity={lit ? 3.2 : 0} distance={2.6} decay={2} />
       </group>
 
       {/* a small stack of books, squared up badly */}
@@ -440,6 +457,133 @@ function Desk({ room }: { room: RoomPlan }) {
           </mesh>
         ))}
       </group>
+    </group>
+  );
+}
+
+/** A brass rail along the front of the case, and a rolling ladder parked at the right-hand end. */
+function LibraryLadder({ frames }: { frames: ShelfFrame[] }) {
+  if (frames.length === 0) return null;
+  const depth = frames[0]!.depth;
+  const backZ = frames[0]!.backLeft[2];
+  const left = frames[0]!.backLeft[0] - 0.06;
+  const right = frames.at(-1)!.backLeft[0] + frames.at(-1)!.width + 0.06;
+  const railY = 2.16;
+  const railZ = backZ + depth + 0.06;
+  const end = right + 0.5;
+  const length = end - left;
+  const ladderX = right + 0.26;
+  const foot = 0.62;
+  const tall = Math.hypot(railY, foot);
+  const lean = Math.atan2(foot, railY);
+  const rungs = 9;
+  return (
+    <group raycast={() => null}>
+      <mesh position={[(left + end) / 2, railY, railZ]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.011, 0.011, length, 10]} />
+        <meshStandardMaterial color={brass} metalness={0.85} roughness={0.28} />
+      </mesh>
+      {[left + 0.02, ...frames.map((frame) => frame.backLeft[0] - 0.02), end - 0.02].map((x, index) => (
+        <mesh key={index} position={[x, railY, railZ - 0.03]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.006, 0.006, 0.06, 6]} />
+          <meshStandardMaterial color={brass} metalness={0.85} roughness={0.28} />
+        </mesh>
+      ))}
+      {/* the ladder hangs from the rail and leans out to the floor */}
+      <group position={[ladderX, railY, railZ]} rotation={[-lean, 0, 0]}>
+        {[-0.19, 0.19].map((x) => (
+          <mesh key={x} position={[x, -tall / 2, 0]}>
+            <boxGeometry args={[0.035, tall, 0.05]} />
+            <meshStandardMaterial color={wood} roughness={0.5} />
+          </mesh>
+        ))}
+        {Array.from({ length: rungs }, (_, index) => (
+          <mesh key={index} position={[0, -tall * ((index + 1) / (rungs + 1)), 0.005]}>
+            <boxGeometry args={[0.38, 0.022, 0.06]} />
+            <meshStandardMaterial color={wood} roughness={0.5} />
+          </mesh>
+        ))}
+        {[-0.19, 0.19].map((x) => (
+          <mesh key={`hook-${x}`} position={[x, 0.01, -0.012]}>
+            <torusGeometry args={[0.016, 0.004, 6, 12, Math.PI]} />
+            <meshStandardMaterial color={brass} metalness={0.85} roughness={0.28} />
+          </mesh>
+        ))}
+        {[-0.19, 0.19].map((x) => (
+          <mesh key={`wheel-${x}`} position={[x, -tall + 0.02, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.025, 0.025, 0.02, 12]} />
+            <meshStandardMaterial color={brass} metalness={0.8} roughness={0.3} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+/**
+ * Morning sun through the window: a faint shaft of light across the room and the
+ * window's shape laid warm on the floor. Additive, so it only ever brightens.
+ */
+function Sunlight({ room }: { room: RoomPlan }) {
+  const patch = useMemo(() => makeSunPatchTexture(), []);
+  const { shaft, floor } = useMemo(() => {
+    const wx = -room.inner.x + 0.025;
+    const cz = -0.05;
+    const halfW = 0.425;
+    const bottom = 1.42 - 0.575;
+    const top = 1.42 + 0.575;
+    const dir = new THREE.Vector3(1, -0.9, -0.55);
+    const toFloor = (y: number, z: number) => {
+      const t = y / -dir.y;
+      return new THREE.Vector3(wx + dir.x * t, 0.004, z + dir.z * t);
+    };
+    const W = [
+      new THREE.Vector3(wx, top, cz - halfW),
+      new THREE.Vector3(wx, top, cz + halfW),
+      new THREE.Vector3(wx, bottom, cz + halfW),
+      new THREE.Vector3(wx, bottom, cz - halfW),
+    ];
+    const F = W.map((corner) => toFloor(corner.y, corner.z));
+
+    // shaft: four faces from the window to its patch on the floor, brighter at the glass.
+    // Values are linear: 0.005 lands as a faint haze on screen once converted to sRGB.
+    const positions: number[] = [];
+    const colors: number[] = [];
+    const warm = new THREE.Color("#ffd9a0");
+    const push = (point: THREE.Vector3, k: number) => {
+      positions.push(point.x, point.y, point.z);
+      colors.push(warm.r * k, warm.g * k, warm.b * k);
+    };
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      push(W[i]!, 0.005);
+      push(W[j]!, 0.005);
+      push(F[j]!, 0);
+      push(W[i]!, 0.005);
+      push(F[j]!, 0);
+      push(F[i]!, 0);
+    }
+    const shaftGeometry = new THREE.BufferGeometry();
+    shaftGeometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    shaftGeometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+
+    // floor patch: the projected quad, mapped so the pane texture lands the right way round
+    const floorGeometry = new THREE.BufferGeometry();
+    const order = [F[0]!, F[1]!, F[2]!, F[0]!, F[2]!, F[3]!];
+    const uv = [0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0];
+    floorGeometry.setAttribute("position", new THREE.Float32BufferAttribute(order.flatMap((p) => [p.x, p.y, p.z]), 3));
+    floorGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    return { shaft: shaftGeometry, floor: floorGeometry };
+  }, [room.inner.x]);
+
+  return (
+    <group raycast={() => null}>
+      <mesh geometry={shaft}>
+        <meshBasicMaterial vertexColors transparent blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+      </mesh>
+      <mesh geometry={floor}>
+        <meshBasicMaterial map={patch} color={"#ffcf8a"} transparent opacity={0.22} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
     </group>
   );
 }
