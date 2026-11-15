@@ -21,6 +21,7 @@ export function BookPopup({
   onFilter?: (filter: Filter) => void;
 }) {
   const [borrow, setBorrow] = useState<Borrow>({ step: "idle" });
+  const [shared, setShared] = useState<"idle" | "copied" | "failed">("idle");
   const [cover, setCover] = useState<"loading" | "ready" | "failed">(book.cover_url ? "loading" : "failed");
   const closeRef = useRef<HTMLButtonElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -43,6 +44,22 @@ export function BookPopup({
   const canBorrow = book.format === "physical" && book.status === "available";
   const cloth = spineArt(book.title).ground;
   const lightCloth = luminance(cloth) > 0.45;
+
+  async function share() {
+    const url = window.location.href;
+    try {
+      if (navigator.share && window.matchMedia("(pointer: coarse)").matches) {
+        await navigator.share({ title: `${book.title} · The Library`, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setShared("copied");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setShared("failed");
+    }
+    window.setTimeout(() => setShared("idle"), 2400);
+  }
 
   async function send(form: HTMLFormElement) {
     const data = new FormData(form);
@@ -88,9 +105,14 @@ export function BookPopup({
       }}
     >
       <article className="book-spread" role="dialog" aria-modal="true" aria-labelledby="book-title">
-        <button ref={closeRef} className="book-close" type="button" onClick={onClose}>
-          Close <kbd>Esc</kbd>
-        </button>
+        <div className="book-tools">
+          <button type="button" className="book-share" onClick={() => void share()} aria-live="polite">
+            {shared === "copied" ? "Link copied" : shared === "failed" ? "Couldn't copy" : "Copy link"}
+          </button>
+          <button ref={closeRef} className="book-close" type="button" onClick={onClose}>
+            Close <kbd>Esc</kbd>
+          </button>
+        </div>
         <div className="book-page book-page-left">
           {/* The cloth cover shows while the jacket loads, and stays if it never arrives. */}
           {cover !== "ready" && (

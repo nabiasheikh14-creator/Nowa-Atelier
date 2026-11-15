@@ -65,7 +65,8 @@ const TAG_RULES: { tag: string; test: RegExp }[] = [
   { tag: "Gothic", test: /gothic/ },
   { tag: "Regency & Victorian", test: /regency|victorian/ },
   { tag: "Postcolonial", test: /postcolonial|partition|feudalism/ },
-  { tag: "Essays & criticism", test: /essays|nonfiction|commentary|criticism|international relations/ },
+  // "Social commentary" in the list describes novels too, so it doesn't count as essays here.
+  { tag: "Essays & criticism", test: /essays|nonfiction|criticism|international relations/ },
   { tag: "Sufi & spiritual", test: /sufi|spiritual|new thought/ },
   { tag: "Confessional poetry", test: /confessional/ },
   { tag: "Contemporary poetry", test: /contemporary poetry|free verse|love and healing/ },
@@ -80,6 +81,8 @@ const TAG_RULES: { tag: string; test: RegExp }[] = [
   { tag: "Korean", test: /korean/ },
   { tag: "LGBTQ+", test: /lgbtq/ },
 ];
+
+export const ALL_TAGS = TAG_RULES.map((rule) => rule.tag);
 
 type Entry = { shelves: string[]; subgenres: string[] };
 const INDEX = index as Record<string, Entry>;
