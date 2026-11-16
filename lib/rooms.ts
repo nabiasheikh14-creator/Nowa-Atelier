@@ -128,17 +128,54 @@ export async function updateRoom(
   return row ?? { error: "Room not found." };
 }
 
-/** Public rooms for the directory, with a count and what each is reading right now. */
-export async function publicRooms(): Promise<(Room & { book_count: number; reading: string[] })[]> {
-  const rows = await sql()<(Room & { book_count: number; reading: string[] | null })[]>`
-    select p.id, p.handle, p.display_name, p.bio, p.visibility, p.claimed,
+export type HallBook = { title: string; author: string };
+export type HallRoom = {
+  id: string;
+  handle: string;
+  display_name: string;
+  bio: string | null;
+  book_count: number;
+  created_at: string;
+  last_active: string | null;
+  /** What stands on the cabinet's shelves: best-rated first, then most recently touched. */
+  shelf: HallBook[];
+  /** Lying on top of the cabinet. */
+  reading: HallBook[];
+};
+
+/** Public rooms for the hall: each with a few spines to show and what they're reading now. */
+export async function publicRooms(): Promise<HallRoom[]> {
+  const rows = await sql()<(Omit<HallRoom, "created_at" | "last_active"> & { created_at: Date; last_active: Date | null })[]>`
+    select p.id, p.handle, p.display_name, p.bio, p.created_at,
       (select count(*)::int from books b where b.owner_id = p.id and b.reading_status <> 'to-read') as book_count,
-      (select array_agg(b.title order by b.updated_at desc) from books b where b.owner_id = p.id and b.reading_status = 'reading') as reading
+      (select max(b.updated_at) from books b where b.owner_id = p.id) as last_active,
+      coalesce((
+        select json_agg(json_build_object('title', s.title, 'author', s.author))
+        from (
+          select b.title, b.author from books b
+          where b.owner_id = p.id and b.reading_status in ('owned', 'read')
+          order by b.rating desc nulls last, b.updated_at desc, b.created_at desc
+          limit 18
+        ) s
+      ), '[]'::json) as shelf,
+      coalesce((
+        select json_agg(json_build_object('title', r.title, 'author', r.author))
+        from (
+          select b.title, b.author from books b
+          where b.owner_id = p.id and b.reading_status = 'reading'
+          order by b.updated_at desc
+          limit 2
+        ) r
+      ), '[]'::json) as reading
     from profiles p
     where p.visibility = 'public'
-    order by book_count desc, p.created_at asc
+    order by p.created_at asc
     limit 200`;
-  return rows.map((row) => ({ ...row, reading: (row.reading ?? []).slice(0, 3) }));
+  return rows.map((row) => ({
+    ...row,
+    created_at: row.created_at.toISOString(),
+    last_active: row.last_active ? row.last_active.toISOString() : null,
+  }));
 }
 
 // ——— books ———
