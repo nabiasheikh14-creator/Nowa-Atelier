@@ -1197,3 +1197,27 @@ a.sv-room { text-decoration: none; display: inline-flex; align-items: center; }
   .hall-links { margin-left: 0; }
   .hall-floor { grid-template-columns: 1fr; }
 }
+
+/* borrow requests */
+.request-dot { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: #c0513b; color: #fff6e4; font-size: 0.72rem; font-weight: 600; line-height: 1; }
+.room-popover .menu-requests { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.menu-requests b { font-weight: 400; font-size: 0.78rem; color: #e8a08f; }
+.request-note { margin: -4px 0 0; }
+.request-empty { padding: 18px 0 6px; border-top: 1px solid rgba(60, 40, 20, 0.15); }
+.request-empty p { margin: 0 0 4px; }
+.borrow-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.request-card { background: rgba(255, 250, 240, 0.6); border: 1px solid rgba(60, 40, 20, 0.16); border-radius: 4px; padding: 14px 16px; display: grid; gap: 8px; }
+.request-card.is-declined, .request-card.is-returned { opacity: 0.75; }
+.request-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.request-head div { display: grid; min-width: 0; flex: 1 1 auto; }
+.request-head strong { font-weight: 400; font-size: 1.1rem; line-height: 1.25; }
+.request-head em { font-style: normal; color: #6f5a42; font-size: 0.84rem; }
+.request-head time { color: #6f5a42; font-size: 0.8rem; white-space: nowrap; }
+.request-who { margin: 0; font-size: 0.92rem; color: #3a2a1c; overflow-wrap: anywhere; }
+.request-who b { font-weight: 600; }
+.request-who a { color: #7a3a22; text-underline-offset: 3px; }
+.request-card blockquote { margin: 0; padding: 2px 0 2px 12px; border-left: 2px solid rgba(122, 58, 34, 0.45); color: #4a3826; font-style: italic; font-size: 0.92rem; white-space: pre-line; }
+.request-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.request-actions .text-button { margin-left: 0; }
+.request-status { font-size: 0.86rem; color: #2d4a38; margin-right: 4px; }
+.request-card.is-declined .request-status { color: #6f5a42; }

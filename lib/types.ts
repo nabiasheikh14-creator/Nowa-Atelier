@@ -1,7 +1,7 @@
 export type BookFormat = "physical" | "epub";
 export type BookStatus = "available" | "lent";
 export type ReadingStatus = "owned" | "reading" | "read" | "to-read";
-export type RequestStatus = "pending" | "approved" | "declined";
+export type RequestStatus = "pending" | "approved" | "declined" | "returned";
 
 export type Book = {
   id: string;

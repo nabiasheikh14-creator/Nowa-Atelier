@@ -6,6 +6,7 @@ import { hasDatabase } from "./db";
 import { FOUNDER } from "./founder";
 import { shelfInfo } from "./genres";
 import { findBookBySlug } from "./links";
+import { pendingRequestCount } from "./requests";
 import { canView, roomBooks, roomByHandle } from "./rooms";
 import { currentViewer } from "./session";
 import { foundingBooks } from "./store";
@@ -16,6 +17,8 @@ export type RoomContext = {
   isOwner: boolean;
   viewerHandle: string | null;
   roomsOpen: boolean;
+  /** Borrow requests still waiting for an answer. Only ever set for the room's owner. */
+  pendingRequests: number;
 };
 
 /** One lookup per request, shared by the page and its metadata. Errors surface; they never read as "private". */
@@ -34,11 +37,13 @@ const load = cache(async function load(handle: string | null): Promise<{ room: R
 export async function renderRoom(handle: string | null) {
   const { room, books, viewer } = await load(handle ? handle.toLowerCase() : null);
   if (!room) return <ClosedRoom signedInAs={viewer?.handle ?? null} />;
+  const isOwner = viewer?.id === room.id;
   const context: RoomContext = {
     room: { handle: room.handle, display_name: room.display_name, visibility: room.visibility, bio: room.bio },
-    isOwner: viewer?.id === room.id,
+    isOwner,
     viewerHandle: viewer?.handle ?? null,
     roomsOpen: hasDatabase(),
+    pendingRequests: isOwner && hasDatabase() ? await pendingRequestCount(room.id).catch(() => 0) : 0,
   };
   return <LibraryExperience key={room.handle} initialBooks={books} context={context} />;
 }

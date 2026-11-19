@@ -104,6 +104,9 @@ export function ShelfBrowser({
           )}
           {context.isOwner ? (
             <>
+              <button type="button" className="sv-room" onClick={() => onDialog("requests")}>
+                Requests{context.pendingRequests > 0 ? ` · ${context.pendingRequests}` : ""}
+              </button>
               <button type="button" className="sv-room" onClick={() => onDialog("add")}>
                 Add a book
               </button>

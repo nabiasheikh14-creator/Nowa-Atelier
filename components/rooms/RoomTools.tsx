@@ -6,9 +6,9 @@ import { readGoodreadsExport, type GoodreadsRow } from "@/lib/goodreads";
 import { shelfInfo } from "@/lib/genres";
 import type { RoomContext } from "@/lib/room-page";
 import type { SearchHit } from "@/lib/open-library";
-import type { Book, ReadingStatus } from "@/lib/types";
+import type { Book, BookStatus, BorrowRequestView, ReadingStatus, RequestStatus } from "@/lib/types";
 
-export type DialogName = "add" | "import" | "settings" | null;
+export type DialogName = "add" | "import" | "settings" | "requests" | null;
 
 /** Small fetch wrapper: JSON in, JSON out, a readable error on failure. */
 export async function call<T>(url: string, method = "GET", body?: unknown): Promise<T> {
@@ -76,12 +76,22 @@ export function RoomMenu({
       )}
       <button type="button" className="room-name" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((value) => !value)}>
         {context.isOwner ? "Your room" : `${name}'s library`}
+        {context.isOwner && context.pendingRequests > 0 && (
+          <b className="request-dot" aria-label={`${context.pendingRequests} borrow ${context.pendingRequests === 1 ? "request" : "requests"} waiting`}>
+            {context.pendingRequests}
+          </b>
+        )}
         <i aria-hidden="true">▾</i>
       </button>
       {open && (
         <div className="room-popover" role="menu">
           {context.isOwner ? (
             <>
+              <button type="button" role="menuitem" className="menu-requests" onClick={() => pick("requests")}>
+                Borrow requests
+                {context.pendingRequests > 0 && <b>{context.pendingRequests} waiting</b>}
+              </button>
+              <hr />
               <button type="button" role="menuitem" onClick={() => pick("add")}>
                 Add a book
               </button>
@@ -541,14 +551,19 @@ export function RoomDialogs({
   onClose,
   onAdded,
   onReload,
+  onPending,
+  onBookStatus,
 }: {
   dialog: DialogName;
   context: RoomContext;
   onClose: () => void;
   onAdded: (book: Book) => void;
   onReload: () => void;
+  onPending: (count: number) => void;
+  onBookStatus: (bookId: string, status: BookStatus) => void;
 }) {
   if (!context.isOwner || !dialog) return null;
+  if (dialog === "requests") return <BorrowRequests onClose={onClose} onPending={onPending} onBookStatus={onBookStatus} />;
   if (dialog === "add") return <AddBook onClose={onClose} onAdded={onAdded} />;
   if (dialog === "import")
     return (
@@ -561,6 +576,159 @@ export function RoomDialogs({
       />
     );
   return <RoomSettings context={context} onClose={onClose} />;
+}
+
+// ——— borrow requests ———
+
+const ANSWERED: Record<Exclude<RequestStatus, "pending">, string> = {
+  approved: "Lent",
+  declined: "Declined",
+  returned: "Back on the shelf",
+};
+
+function since(iso: string): string {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} ${days === 1 ? "day" : "days"} ago`;
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** An email or a phone number becomes a link; anything else stays as written. */
+function ContactLink({ contact }: { contact: string }) {
+  const value = contact.trim();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return <a href={`mailto:${value}`}>{value}</a>;
+  if (/^\+?[\d\s()-]{7,}$/.test(value)) return <a href={`tel:${value.replace(/[^\d+]/g, "")}`}>{value}</a>;
+  return <span>{value}</span>;
+}
+
+function BorrowRequests({
+  onClose,
+  onPending,
+  onBookStatus,
+}: {
+  onClose: () => void;
+  onPending: (count: number) => void;
+  onBookStatus: (bookId: string, status: BookStatus) => void;
+}) {
+  const [requests, setRequests] = useState<BorrowRequestView[] | null>(null);
+  const [tab, setTab] = useState<"waiting" | "answered">("waiting");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    call<{ requests: BorrowRequestView[] }>("/api/my/requests")
+      .then((data) => {
+        if (!live) return;
+        setRequests(data.requests);
+        onPending(data.requests.filter((request) => request.status === "pending").length);
+      })
+      .catch((problem) => live && setError((problem as Error).message));
+    return () => {
+      live = false;
+    };
+  }, [onPending]);
+
+  async function answer(request: BorrowRequestView, status: RequestStatus) {
+    setBusy(request.id);
+    setError(null);
+    try {
+      const { request: updated } = await call<{ request: BorrowRequestView }>(`/api/my/requests/${request.id}`, "PATCH", { status });
+      const next = (requests ?? []).map((item) => (item.id === updated.id ? updated : item));
+      setRequests(next);
+      onPending(next.filter((item) => item.status === "pending").length);
+      if (status === "approved") onBookStatus(request.book_id, "lent");
+      else if (request.status === "approved") onBookStatus(request.book_id, "available");
+    } catch (problem) {
+      setError((problem as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const waiting = (requests ?? []).filter((request) => request.status === "pending");
+  const answered = (requests ?? []).filter((request) => request.status !== "pending");
+  const shown = tab === "waiting" ? waiting : answered;
+
+  return (
+    <Dialog title="Borrow requests" onClose={onClose} wide>
+      <p className="muted small request-note">
+        Bayaz doesn&apos;t message anyone for you. Reach out using the contact they left, then mark what you decided here.
+      </p>
+      <div className="segmented" role="tablist" aria-label="Requests">
+        <button type="button" role="tab" aria-selected={tab === "waiting"} className={tab === "waiting" ? "on" : ""} onClick={() => setTab("waiting")}>
+          Waiting{waiting.length > 0 ? ` · ${waiting.length}` : ""}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "answered"} className={tab === "answered" ? "on" : ""} onClick={() => setTab("answered")}>
+          Answered{answered.length > 0 ? ` · ${answered.length}` : ""}
+        </button>
+      </div>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      {requests === null && !error && <p className="muted">Checking your requests…</p>}
+      {requests !== null && shown.length === 0 && (
+        <div className="request-empty">
+          {tab === "waiting" ? (
+            <>
+              <p>No one is waiting on you.</p>
+              <p className="muted small">When someone asks to borrow a book from your room, it shows up here.</p>
+            </>
+          ) : (
+            <p className="muted small">Requests you&apos;ve answered will be kept here.</p>
+          )}
+        </div>
+      )}
+      {shown.length > 0 && (
+        <ul className="borrow-list">
+          {shown.map((request) => (
+            <li key={request.id} className={`request-card is-${request.status}`}>
+              <div className="request-head">
+                <div>
+                  <strong>{request.book_title}</strong>
+                  <em>{request.book_author}</em>
+                </div>
+                <time dateTime={request.created_at}>{since(request.created_at)}</time>
+              </div>
+              <p className="request-who">
+                <b>{request.requester_name}</b> asked to borrow it · <ContactLink contact={request.requester_contact} />
+              </p>
+              {request.message && <blockquote>{request.message}</blockquote>}
+              <div className="request-actions">
+                {request.status === "pending" && (
+                  <>
+                    <button type="button" className="ink-button small" disabled={busy === request.id} onClick={() => void answer(request, "approved")}>
+                      Lend it
+                    </button>
+                    <button type="button" className="ink-button small ghost" disabled={busy === request.id} onClick={() => void answer(request, "declined")}>
+                      Say no
+                    </button>
+                  </>
+                )}
+                {request.status !== "pending" && <span className="request-status">{request.status === "approved" ? `Lent to ${request.requester_name}` : ANSWERED[request.status]}</span>}
+                {request.status === "approved" && (
+                  <button type="button" className="ink-button small ghost" disabled={busy === request.id} onClick={() => void answer(request, "returned")}>
+                    It&apos;s back
+                  </button>
+                )}
+                {request.status !== "pending" && (
+                  <button type="button" className="text-button" disabled={busy === request.id} onClick={() => void answer(request, "pending")}>
+                    Undo
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Dialog>
+  );
 }
 
 /** A room with nothing on its shelves yet. */
