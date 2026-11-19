@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { Book } from "@/lib/types";
+import type { Book, BookStatus } from "@/lib/types";
 import { GENRE_ORDER } from "@/lib/room-plan";
 import {
   crossTags,
@@ -77,9 +77,12 @@ function focusFor(place: Place, books: Book[]): FocusRequest {
   return null;
 }
 
-export function LibraryExperience({ initialBooks, context }: { initialBooks: Book[]; context: RoomContext }) {
+export function LibraryExperience({ initialBooks, context: roomContext }: { initialBooks: Book[]; context: RoomContext }) {
   const [books, setBooks] = useState(initialBooks);
   const [dialog, setDialog] = useState<DialogName>(null);
+  // Answering a borrow request changes the count on the menu without a reload.
+  const [pending, setPending] = useState(roomContext.pendingRequests);
+  const context = useMemo(() => ({ ...roomContext, pendingRequests: pending }), [roomContext, pending]);
   // The 3D shelves only need rebuilding when what stands on them changes, not when a rating does.
   const shelfSignature = books.map((book) => `${book.id}|${book.genre}|${book.title}|${book.status}`).join(";");
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -231,6 +234,10 @@ export function LibraryExperience({ initialBooks, context }: { initialBooks: Boo
     if (book.reading_status !== "to-read") setBooks((current) => [...current, book]);
   }
 
+  function bookStatusChanged(id: string, status: BookStatus) {
+    setBooks((current) => current.map((book) => (book.id === id ? { ...book, status } : book)));
+  }
+
   async function reloadBooks() {
     try {
       const data = await call<{ books: Book[] }>(`/api/rooms/${context.room.handle}/books`);
@@ -241,7 +248,15 @@ export function LibraryExperience({ initialBooks, context }: { initialBooks: Boo
   }
 
   const dialogs = (
-    <RoomDialogs dialog={dialog} context={context} onClose={() => setDialog(null)} onAdded={bookAdded} onReload={() => void reloadBooks()} />
+    <RoomDialogs
+      dialog={dialog}
+      context={context}
+      onClose={() => setDialog(null)}
+      onAdded={bookAdded}
+      onReload={() => void reloadBooks()}
+      onPending={setPending}
+      onBookStatus={bookStatusChanged}
+    />
   );
 
   const showRoom = useCallback(() => {
