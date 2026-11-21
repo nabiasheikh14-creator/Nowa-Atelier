@@ -95,6 +95,32 @@ export async function createAccount(input: {
   }
 }
 
+/**
+ * Hands the founding room to an account that already exists, when its email is OWNER_EMAIL
+ * and nobody has claimed the room yet (for an owner who signed up before OWNER_EMAIL was
+ * set). Books already in the account's own room move across, skipping ones the founding
+ * room has; then the account takes over the founding room's id and its old room goes.
+ */
+export async function claimFoundingRoom(userId: string, email: string): Promise<boolean> {
+  if (userId === FOUNDER.id || ownerEmail() !== email.trim().toLowerCase()) return false;
+  return sql().begin(async (tx) => {
+    const [founder] = await tx`select id from profiles where id = ${FOUNDER.id} and claimed = false for update`;
+    if (!founder) return false;
+    await tx`
+      update books set owner_id = ${FOUNDER.id}
+      where owner_id = ${userId}
+        and lower(title) || '|' || lower(author) not in (
+          select lower(title) || '|' || lower(author) from books where owner_id = ${FOUNDER.id})`;
+    await tx`update borrow_requests set owner_id = ${FOUNDER.id} where owner_id = ${userId}`;
+    await tx`delete from books where owner_id = ${userId}`;
+    await tx`delete from sessions where user_id = ${userId}`;
+    await tx`delete from profiles where id = ${userId}`;
+    await tx`update users set id = ${FOUNDER.id} where id = ${userId}`;
+    await tx`update profiles set claimed = true where id = ${FOUNDER.id}`;
+    return true;
+  });
+}
+
 // ——— rooms ———
 
 export async function roomByHandle(handle: string): Promise<Room | null> {

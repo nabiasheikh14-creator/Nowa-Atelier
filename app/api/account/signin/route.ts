@@ -1,7 +1,8 @@
 import { fail, readJson, text } from "@/lib/api";
 import { hasDatabase } from "@/lib/db";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
-import { findUserByEmail, roomById } from "@/lib/rooms";
+import { FOUNDER } from "@/lib/founder";
+import { claimFoundingRoom, findUserByEmail, roomById } from "@/lib/rooms";
 import { hashPassword, passwordMatches, sameOrigin, startSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -23,7 +24,9 @@ export async function POST(request: Request) {
   decoy ??= hashPassword("decoy-password");
   const ok = user ? await passwordMatches(password, user.password_hash) : (await passwordMatches(password, await decoy), false);
   if (!user || !ok) return fail(401, "That email and password don't match a room.");
-  await startSession(user.id);
-  const room = await roomById(user.id);
+  // The site's owner may have signed up before OWNER_EMAIL was set: hand them the founding room now.
+  const id = (await claimFoundingRoom(user.id, user.email)) ? FOUNDER.id : user.id;
+  await startSession(id);
+  const room = await roomById(id);
   return Response.json({ handle: room?.handle ?? null });
 }
